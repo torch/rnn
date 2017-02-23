@@ -7,6 +7,11 @@ assert(dpnn.version > 1, "Please update dpnn : luarocks install dpnn")
 rnn = {}
 rnn.version = 2
 rnn.version = 2.1 -- [get,set][Grad]HiddenState(step)
+rnn.version = 2.2 -- C rnn library
+
+-- c lib:
+require "paths"
+paths.require 'librnn'
 
 unpack = unpack or table.unpack
 
@@ -19,14 +24,15 @@ torch.include('rnn', 'Module.lua')
 torch.include('rnn', 'Dropout.lua')
 
 -- for testing:
-torch.include('rnn', 'test/test.lua')
-torch.include('rnn', 'test/bigtest.lua')
+torch.include('rnn', 'test.lua')
+torch.include('rnn', 'bigtest.lua')
 
 -- support modules
 torch.include('rnn', 'ZeroGrad.lua')
 torch.include('rnn', 'LinearNoBias.lua')
 torch.include('rnn', 'SAdd.lua')
 torch.include('rnn', 'CopyGrad.lua')
+torch.include('rnn', 'VariableLength')
 
 -- recurrent modules
 torch.include('rnn', 'LookupTableMaskZero.lua')

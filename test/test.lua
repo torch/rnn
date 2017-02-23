@@ -6827,6 +6827,141 @@ function rnntest.getHiddenState()
    testHiddenState(lstm, true)
 end
 
+
+function rnntest.VariableLength_FromSamples()
+   torch.manualSeed(0)
+   local nSamples = 10
+   local maxLength = 20
+   for run=1,10 do
+      local lengths = torch.LongTensor(nSamples)
+      lengths:random(maxLength)
+      local samples = {}
+      for i=1,nSamples do
+         local t = torch.rand(lengths[i], 5)
+         samples[i] = t
+      end
+      local output = torch.Tensor()
+      local mask = torch.ByteTensor()
+      local indexes, mappedLengths = output.nn.VariableLength_FromSamples(samples, output, mask)
+
+      for i, ids in ipairs(indexes) do
+         local m = mask:select(2, i)
+         local t = output:select(2, i)
+         for j, sampleId in ipairs(ids) do
+            local l = lengths[sampleId]
+            -- check that the length was mapped correctly
+            mytester:assert(l == mappedLengths[i][j])
+            -- checks that the mask is 0 for valid entries
+            mytester:assert(math.abs(m:narrow(1, 1, l):sum()) < 0.000001)
+            -- checks that the valid entries are equal
+            mytester:assertTensorEq(t:narrow(1, 1, l), samples[sampleId])
+            if l < m:size(1) then
+               mytester:assert(m[l+1] == 1)
+            end
+            if l+1 < m:size(1) then
+               m = m:narrow(1, l+2, m:size(1)-l-1)
+               t = t:narrow(1, l+2, t:size(1)-l-1)
+            end
+         end
+      end
+   end
+end
+
+function rnntest.VariableLength_ToSamples()
+   local nSamples = 10
+   local maxLength = 20
+   for run=1,10 do
+      local lengths = torch.LongTensor(nSamples)
+      lengths:random(maxLength)
+      local samples = {}
+      for i=1,nSamples do
+         samples[i] = torch.rand(lengths[i], 5)
+      end
+      local output = torch.Tensor()
+      local mask = torch.ByteTensor()
+      local indexes, mappedLengths = output.nn.VariableLength_FromSamples(samples, output, mask)
+      local new_samples = output.nn.VariableLength_ToSamples(indexes, mappedLengths, output)
+      mytester:assert(#samples == #new_samples)
+      for i=1,nSamples do
+         mytester:assertTensorEq(samples[i], new_samples[i])
+      end
+   end
+end
+
+function rnntest.VariableLength_ToFinal()
+   local nSamples = 10
+   local maxLength = 20
+   for run=1,10 do
+      local lengths = torch.LongTensor(nSamples)
+      lengths:random(maxLength)
+      local samples = {}
+      for i=1,nSamples do
+         local t = torch.rand(lengths[i], 5)
+         samples[i] = t
+      end
+      local output = torch.Tensor()
+      local mask = torch.ByteTensor()
+      local indexes, mappedLengths = output.nn.VariableLength_FromSamples(samples, output, mask)
+
+      local final = torch.Tensor()
+      output.nn.VariableLength_ToFinal(indexes, mappedLengths, output, final)
+
+      for i=1,nSamples do
+         mytester:assertTensorEq(samples[i]:select(1, lengths[i]), final:select(1, i))
+      end
+   end
+end
+
+function rnntest.VariableLength_FromFinal()
+   torch.manualSeed(2)
+   local nSamples = 10
+   local maxLength = 20
+   for run=1,1 do
+      local lengths = torch.LongTensor(nSamples)
+      lengths:random(maxLength)
+      local samples = {}
+      for i=1,nSamples do
+         local t = torch.rand(lengths[i], 5)
+         samples[i] = t
+      end
+      local output = torch.Tensor()
+      local mask = torch.ByteTensor()
+      local indexes, mappedLengths = output.nn.VariableLength_FromSamples(samples, output, mask)
+
+      local final = torch.Tensor()
+      output.nn.VariableLength_ToFinal(indexes, mappedLengths, output, final)
+
+      local re_output = torch.Tensor()
+      output.nn.VariableLength_FromFinal(indexes, mappedLengths, final, re_output)
+
+      local new_samples = output.nn.VariableLength_ToSamples(indexes, mappedLengths, re_output)
+
+      for i=1,nSamples do
+         if lengths[i] > 1 then
+            mytester:assert(new_samples[i]:narrow(1, 1, lengths[i]-1):abs():sum() < 0.000001)
+         end
+         mytester:assertTensorEq(samples[i]:select(1, lengths[i]), new_samples[i]:select(1, lengths[i]))
+      end
+   end
+end
+
+function rnntest.VariableLength_main()
+   local maxLength = 8
+   local batchSize = 3
+   local hiddenSize = 5
+   local input = {}
+   for i=1,batchSize do
+      input[i] = torch.randn(torch.random(1,maxLength))
+   end
+
+   local lstm = nn.SeqLSTM(hiddenSize, hiddenSize)
+   local vl = nn.VariableLength(lstm)
+
+   local output = vl:forward(input)
+
+
+end
+
 function rnn.test(tests, benchmark_, exclude)
    mytester = torch.Tester()
    mytester:add(rnntest)
