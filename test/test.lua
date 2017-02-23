@@ -6945,52 +6945,112 @@ function rnntest.VariableLength_FromFinal()
    end
 end
 
-function rnntest.VariableLength_main()
+function rnntest.VariableLength_lstm()
+   -- test seqlen x batchsize x hiddensize
    local maxLength = 8
    local batchSize = 3
    local hiddenSize = 5
+   local nIndex = 20
 
-   -- VL(LSTM): test forward
-   local input = {}
-   for i=1,batchSize do
-      input[i] = torch.randn(torch.random(1,maxLength), hiddenSize)
+   local function testVL(testLM, lastOnly)
+      -- VL(LSTM): test forward
+
+      local input = {}
+      local lstm, vl, input2, output
+      if not testLM then
+         for i=1,batchSize do
+            input[i] = torch.randn(torch.random(1,maxLength), hiddenSize)
+         end
+
+         lstm = nn.SeqLSTM(hiddenSize, hiddenSize):maskZero()
+
+         input2 = torch.Tensor(maxLength, batchSize, hiddenSize):zero()
+      else
+         for i=1,batchSize do
+            input[i] = torch.Tensor(torch.random(1,maxLength)):random(1,nIndex)
+         end
+
+         lstm = nn.Sequential()
+            :add(nn.LookupTableMaskZero(nIndex, hiddenSize))
+            :add(nn.SeqLSTM(hiddenSize, hiddenSize):maskZero())
+
+         input2 = torch.Tensor(maxLength, batchSize):zero()
+      end
+
+      vl = nn.VariableLength(lstm:clone(), lastOnly)
+
+      local output = vl:forward(input)
+
+      for i=1,batchSize do
+         local seqlen = input[i]:size(1)
+         input2:select(2,i):narrow(1,maxLength-seqlen+1,seqlen):copy(input[i])
+      end
+
+      local output2 = lstm:forward(input2)
+
+      if not lastOnly then
+         for i=1,batchSize do
+            local out1 = output[i]
+            local seqlen = input[i]:size(1)
+            mytester:assert(out1:size(1) == seqlen)
+            local out2 = output2:select(2,i):narrow(1,maxLength-seqlen+1,seqlen)
+            mytester:assertTensorEq(out1, out2, 0.00000001)
+         end
+      else
+         mytester:assertTensorEq(output, output2[maxLength], 0.000001)
+      end
+
+      -- VL(LSTM): test backward
+
+      local gradOutput, gradOutput2
+      if not lastOnly then
+         gradOutput = {}
+         for i=1,batchSize do
+            gradOutput[i] = torch.randn(output[i]:size())
+         end
+
+         gradOutput2 = torch.Tensor(maxLength, batchSize, hiddenSize):zero()
+         for i=1,batchSize do
+            local seqlen = gradOutput[i]:size(1)
+            gradOutput2:select(2,i):narrow(1,maxLength-seqlen+1,seqlen):copy(gradOutput[i])
+         end
+      else
+         gradOutput = torch.randn(batchSize, hiddenSize)
+         gradOutput2 = torch.Tensor(maxLength, batchSize, hiddenSize):zero()
+         gradOutput2[maxLength]:copy(gradOutput)
+      end
+
+      vl:zeroGradParameters()
+      local gradInput = vl:backward(input, gradOutput)
+
+      for i=1,batchSize do
+         mytester:assert(input[i]:isSameSizeAs(gradInput[i]))
+      end
+
+      lstm:zeroGradParameters()
+      local gradInput2 = lstm:backward(input2, gradOutput2)
+
+      for i=1,batchSize do
+         local gradIn1 = gradInput[i]
+         local seqlen = input[i]:size(1)
+         mytester:assert(gradIn1:size(1) == seqlen)
+         local gradIn2 = gradInput2:select(2,i):narrow(1,maxLength-seqlen+1,seqlen)
+         mytester:assertTensorEq(gradIn1, gradIn2, 0.00000001)
+      end
+
+      local params, gradParams = vl:parameters()
+      local params2, gradParams2 = lstm:parameters()
+
+      for i=1,#params2 do
+         mytester:assertTensorEq(gradParams[i], gradParams2[i], 0.000001)
+      end
    end
 
-   local lstm = nn.SeqLSTM(hiddenSize, hiddenSize)
-   lstm:maskZero()
-   local vl = nn.VariableLength(lstm:clone())
-
-   local output = vl:forward(input)
-
-   local input2 = torch.Tensor(maxLength, batchSize, hiddenSize):zero()
-   for i=1,batchSize do
-      local seqlen = input[i]:size(1)
-      input2:select(2,i):narrow(1,maxLength-seqlen+1,seqlen):copy(input[i])
-   end
-
-   local output2 = lstm:forward(input2)
-
-   for i=1,batchSize do
-      local out1 = output[i]
-      local seqlen = input[i]:size(1)
-      mytester:assert(out1:size(1) == seqlen)
-      local out2 = output2:select(2,i):narrow(1,maxLength-seqlen+1,seqlen)
-      mytester:assertTensorEq(out1, out2, 0.00000001)
-   end
-
-   -- VL(LSTM): test backward
-
-   local gradOutput = {}
-   for i=1,batchSize do
-      gradOutput[i] = torch.randn(output[i]:size())
-   end
-
-   vl:zeroGradParameters()
-   local gradInput = vl:backward(input, gradOutput)
-
-   for i=1,batchSize do
-      mytester:assert(input[i]:isSameSizeAs(gradInput[i]))
-   end
+   -- testVL(testLstm, lastOnly)
+   testVL(false, false)
+   testVL(true, false)
+   testVL(false, true)
+   testVL(true, true)
 end
 
 function rnn.test(tests, benchmark_, exclude)

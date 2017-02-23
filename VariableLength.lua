@@ -27,8 +27,7 @@ function VariableLength.recursiveMask(input, mask)
          local inputSize = input:size():fill(1)
          inputSize[1] = input:size(1)
          inputSize[2] = input:size(2)
-         mask:resize(inputSize)
-         zeroMask = mask:expandAs(input)
+         zeroMask = mask:view(inputSize):expandAs(input)
       else
          error"Expecting batchsize x seqlen [ x ...] input tensor"
       end
@@ -61,7 +60,7 @@ function VariableLength:updateOutput(input)
       -- Extract the last time step of each sample.
       -- self.output tensor has shape: batchSize [x outputSize]
       self.output = torch.isTensor(self.output) and self.output or output.new()
-      self.output.nn.VariableLength_ToFinal(selfindexes, self.mappedLengths, output, self.output)
+      self.output.nn.VariableLength_ToFinal(self.indexes, self.mappedLengths, output, self.output)
    else
       -- This is the revese operation of everything before updateOutput
       self.output = self._input.nn.VariableLength_ToSamples(self.indexes, self.mappedLengths, output)

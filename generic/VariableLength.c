@@ -163,6 +163,7 @@ static int nn_(from_samples_to_structured)(lua_State *L) {
   THTensor_(free)(section);
   THTensor_(free)(step);
   THTensor_(free)(_step);
+  THLongStorage_free(output_size);
   THByteTensor_free(mrow);
   THByteTensor_free(msection);
 
@@ -244,8 +245,13 @@ static int nn_(from_structured_to_final)(lua_State *L) {
     return LUA_HANDLE_ERROR_STR(L, "tensor should be contiguous");
 
   long n_samples = get_n_samples(L, mapped_lengths_index);
-  long n_features = THTensor_(size)(input, 2);
-  THTensor_(resize2d)(output, n_samples, n_features);
+  long output_dim = THTensor_(nDimension)(input) - 1;
+  THLongStorage* output_size = THLongStorage_newWithSize(output_dim); // n_samples [x ...]
+  output_size->data[0] = n_samples;
+  for (long i=1;i < output_dim; i++){
+    output_size->data[i] = THTensor_(size)(input, i+1);
+  }
+  THTensor_(resize)(output, output_size, NULL);
 
   long n_rows = lua_objlen(L, indexes_index);
   THTensor *row = THTensor_(new)(), *section = THTensor_(new)();
@@ -279,6 +285,7 @@ static int nn_(from_structured_to_final)(lua_State *L) {
   THTensor_(free)(row);
   THTensor_(free)(section);
   THTensor_(free)(output_section);
+  THLongStorage_free(output_size);
 
   return 0;
 }
@@ -303,9 +310,16 @@ static int nn_(from_final_to_structured)(lua_State *L) {
     return LUA_HANDLE_ERROR_STR(L, "tensor should be contiguous");
 
   long max_length = get_max_length(L, mapped_lengths_index);
-  long n_features = THTensor_(size)(input, 1);
   long n_rows = lua_objlen(L, mapped_lengths_index);
-  THTensor_(resize3d)(output, max_length, n_rows, n_features);
+
+  long output_dim = THTensor_(nDimension)(input) + 1;
+  THLongStorage* output_size = THLongStorage_newWithSize(output_dim); // max_length x n_rows [x ...]
+  output_size->data[0] = max_length;
+  output_size->data[1] = n_rows;
+  for (long i=2;i < output_dim; i++){
+    output_size->data[i] = THTensor_(size)(input, i-1);
+  }
+  THTensor_(resize)(output, output_size, NULL);
   THTensor_(fill)(output, 0);
 
   THTensor *row = THTensor_(new)(), *section = THTensor_(new)();
@@ -339,6 +353,7 @@ static int nn_(from_final_to_structured)(lua_State *L) {
   THTensor_(free)(row);
   THTensor_(free)(section);
   THTensor_(free)(input_section);
+  THLongStorage_free(output_size);
 
   return 0;
 }
