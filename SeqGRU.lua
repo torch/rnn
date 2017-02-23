@@ -61,7 +61,7 @@ function SeqGRU:__init(inputSize, outputSize)
   self.grad_a_buffer = torch.Tensor() -- This will be (N, 3H)
 
   self.h0 = torch.Tensor()
-  
+
   self._remember = 'neither'
 
   self.grad_h0 = torch.Tensor()
@@ -240,7 +240,7 @@ function SeqGRU:updateOutput(input)
   else
     self.output = self._output
   end
-  
+
   return self.output
 end
 
@@ -282,8 +282,8 @@ function SeqGRU:backward(input, gradOutput, scale)
       prev_h = h[t - 1]
     end
     grad_next_h:add(grad_h[t])
-    
-    if self.maskzero then    
+
+    if self.maskzero then
       -- build mask from input
       local cur_x = x[t]
       local vectorDim = cur_x:dim()
@@ -303,8 +303,8 @@ function SeqGRU:backward(input, gradOutput, scale)
     local grad_ar = grad_a[{{}, {1, H}}]
     local grad_au = grad_a[{{}, {H + 1, 2 * H}}]
     local grad_ahc = grad_a[{{}, {2 * H + 1, 3 * H}}]
-    
-    
+
+
 
     -- We will use grad_au as temporary buffer
     -- to compute grad_ahc.
@@ -439,8 +439,8 @@ function SeqGRU:toGRU()
   local params, gradParams = gru:parameters()
   local nWxi, nbxi, nWhi, nWxo, nbxo, nWho = unpack(params)
   local ngWxi, ngbxi, ngWhi, ngWxo, ngbxo, ngWho = unpack(gradParams)
-  
-  
+
+
   nWxi:t():copy(Wx[{{}, {1, 2*H}}]) -- update and reset gate
   nWxo:t():copy(Wx[{{}, {2 * H + 1, 3 * H}}])
   nWhi:t():copy(Wh[{{}, {1, 2*H}}])
@@ -453,11 +453,12 @@ function SeqGRU:toGRU()
   ngWho:t():copy(gWh[{{}, {2 * H + 1, 3 * H}}])
   ngbxi:copy(gbxi[{{1, 2 * H}}])
   ngbxo:copy(gbxo)
-  
+
   return gru
 end
 
 
 function SeqGRU:maskZero()
   self.maskzero = true
+  return self
 end
