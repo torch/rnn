@@ -5,6 +5,7 @@ function VariableLength:__init(module, lastOnly)
    parent.__init(self, module)
    -- only extract the last element of each sequence
    self.lastOnly = lastOnly -- defaults to false
+   self.gradInput = {}
 end
 
 -- recursively masks input (inplace)
@@ -63,17 +64,48 @@ function VariableLength:updateOutput(input)
       self.output.nn.VariableLength_ToFinal(selfindexes, self.mappedLengths, output, self.output)
    else
       -- This is the revese operation of everything before updateOutput
-      self.output = input.nn.VariableLength_ToSamples(self.indexes, self.mappedLengths, output)
+      self.output = self._input.nn.VariableLength_ToSamples(self.indexes, self.mappedLengths, output)
    end
 
    return self.output
 end
 
-function VariableLength:updateGradInput(input, gradInput)
+function VariableLength:updateGradInput(input, gradOutput)
+
+   self._gradOutput = self._gradOutput or self._input.new()
+   if self.lastOnly then
+      assert(torch.isTensor(gradOutput))
+      self._gradOutput.nn.VariableLength_FromFinal(self.indexes, self.mappedLengths, gradOutput, self._gradOutput)
+   else
+      assert(torch.type(gradOutput) == 'table')
+      assert(torch.isTensor(gradOutput[1]))
+      self.indexes, self.mappedLengths = self._gradOutput.nn.VariableLength_FromSamples(gradOutput, self._gradOutput, self._mask)
+   end
+
+   -- zero-mask the _gradOutput where mask is 1
+   self.recursiveMask(self._gradOutput, self._mask)
+
+   -- updateGradInput decorated module
+   local gradInput = self.modules[1]:updateGradInput(self._input, self._gradOutput)
+
+   self.gradInput = self._input.nn.VariableLength_ToSamples(self.indexes, self.mappedLengths, gradInput)
 
    return self.gradInput
 end
 
-function VariableLength:accGradParameters(input, gradInput, scale)
+function VariableLength:accGradParameters(input, gradOutput, scale)
+   -- requires a previous call to updateGradInput
+   self.modules[1]:accGradParameters(self._input, self._gradOutput, scale)
+end
 
+function VariableLength:clearState()
+   self.gradInput = {}
+   if torch.isTensor(self.output) then
+      self.output:set()
+   else
+      self.output = {}
+   end
+   self._gradOutput:set()
+   self._input:set()
+   return parent.clearState(self)
 end

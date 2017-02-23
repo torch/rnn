@@ -6949,17 +6949,48 @@ function rnntest.VariableLength_main()
    local maxLength = 8
    local batchSize = 3
    local hiddenSize = 5
+
+   -- VL(LSTM): test forward
    local input = {}
    for i=1,batchSize do
-      input[i] = torch.randn(torch.random(1,maxLength))
+      input[i] = torch.randn(torch.random(1,maxLength), hiddenSize)
    end
 
    local lstm = nn.SeqLSTM(hiddenSize, hiddenSize)
-   local vl = nn.VariableLength(lstm)
+   lstm:maskZero()
+   local vl = nn.VariableLength(lstm:clone())
 
    local output = vl:forward(input)
 
+   local input2 = torch.Tensor(maxLength, batchSize, hiddenSize):zero()
+   for i=1,batchSize do
+      local seqlen = input[i]:size(1)
+      input2:select(2,i):narrow(1,maxLength-seqlen+1,seqlen):copy(input[i])
+   end
 
+   local output2 = lstm:forward(input2)
+
+   for i=1,batchSize do
+      local out1 = output[i]
+      local seqlen = input[i]:size(1)
+      mytester:assert(out1:size(1) == seqlen)
+      local out2 = output2:select(2,i):narrow(1,maxLength-seqlen+1,seqlen)
+      mytester:assertTensorEq(out1, out2, 0.00000001)
+   end
+
+   -- VL(LSTM): test backward
+
+   local gradOutput = {}
+   for i=1,batchSize do
+      gradOutput[i] = torch.randn(output[i]:size())
+   end
+
+   vl:zeroGradParameters()
+   local gradInput = vl:backward(input, gradOutput)
+
+   for i=1,batchSize do
+      mytester:assert(input[i]:isSameSizeAs(gradInput[i]))
+   end
 end
 
 function rnn.test(tests, benchmark_, exclude)

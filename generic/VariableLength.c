@@ -32,12 +32,14 @@ static int nn_(from_samples_to_structured)(lua_State *L) {
   // processes the samples to get some meta-info that will be used to determine the positioning in
   // the dense tensor created in the output
   Sample samples_info[n_samples];
-  long n_features = -1;
+  THTensor* step = THTensor_(new)(); // a tensor that contains first step of first tensor
+  THTensor* _step = THTensor_(new)(); // contains first step of other tensors (sizes much match)
   for (long i = 0; i < n_samples; i++) {
-    if (n_features == -1)
-      n_features = THTensor_(size)(tensors[i], 1);
-    else if (THTensor_(size)(tensors[i], 1) != n_features)
-      return LUA_HANDLE_ERROR_STR(L, "got tensors of different second dimensions");
+    THTensor_(narrow)(_step, tensors[i], 0, 0, 1); // 1 [x ...]
+    if (i == 0)
+      THTensor_(narrow)(step, tensors[i], 0, 0, 1);
+    else if (!THTensor_(isSameSizeAs)(step, _step))
+      return LUA_HANDLE_ERROR_STR(L, "got tensors of different sizes");
     samples_info[i].length = THTensor_(size)(tensors[i], 0);
     samples_info[i].index = i;
     samples_info[i].assigned_row = -1;
@@ -114,7 +116,15 @@ static int nn_(from_samples_to_structured)(lua_State *L) {
 
   // with the info available, resizes the output and mask
   long n_rows = lua_objlen(L, indexes_index);
-  THTensor_(resize3d)(output, max_length, n_rows, n_features);
+  // output will have size: maxlen x nrows [x ...]
+  long output_dim = THTensor_(nDimension)(step) + 1;
+  THLongStorage* output_size = THLongStorage_newWithSize(output_dim);
+  output_size->data[0] = max_length;
+  output_size->data[1] = n_rows;
+  for (long i=2; i < output_dim; i++) {
+    output_size->data[i] = THTensor_(size)(step, i-1);
+  }
+  THTensor_(resize)(output, output_size, NULL);
   THByteTensor_resize2d(mask, max_length, n_rows);
   // mask starts filled with ones indicating it's empty
   THByteTensor_fill(mask, 1);
@@ -151,6 +161,8 @@ static int nn_(from_samples_to_structured)(lua_State *L) {
   }
   THTensor_(free)(row);
   THTensor_(free)(section);
+  THTensor_(free)(step);
+  THTensor_(free)(_step);
   THByteTensor_free(mrow);
   THByteTensor_free(msection);
 

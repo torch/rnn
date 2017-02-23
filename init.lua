@@ -32,7 +32,7 @@ torch.include('rnn', 'ZeroGrad.lua')
 torch.include('rnn', 'LinearNoBias.lua')
 torch.include('rnn', 'SAdd.lua')
 torch.include('rnn', 'CopyGrad.lua')
-torch.include('rnn', 'VariableLength')
+torch.include('rnn', 'VariableLength.lua')
 
 -- recurrent modules
 torch.include('rnn', 'LookupTableMaskZero.lua')
