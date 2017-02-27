@@ -1,5 +1,3 @@
-#include "error.h"
-
 #define check_tensors(L, a, b) \
    do { \
       if ((a)->nDimension != (b)->nDimension) \
