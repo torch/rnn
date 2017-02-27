@@ -6827,6 +6827,232 @@ function rnntest.getHiddenState()
    testHiddenState(lstm, true)
 end
 
+
+function rnntest.VariableLength_FromSamples()
+   torch.manualSeed(0)
+   local nSamples = 10
+   local maxLength = 20
+   for run=1,10 do
+      local lengths = torch.LongTensor(nSamples)
+      lengths:random(maxLength)
+      local samples = {}
+      for i=1,nSamples do
+         local t = torch.rand(lengths[i], 5)
+         samples[i] = t
+      end
+      local output = torch.Tensor()
+      local mask = torch.ByteTensor()
+      local indexes, mappedLengths = output.nn.VariableLength_FromSamples(samples, output, mask)
+
+      for i, ids in ipairs(indexes) do
+         local m = mask:select(2, i)
+         local t = output:select(2, i)
+         for j, sampleId in ipairs(ids) do
+            local l = lengths[sampleId]
+            -- check that the length was mapped correctly
+            mytester:assert(l == mappedLengths[i][j])
+            -- checks that the mask is 0 for valid entries
+            mytester:assert(math.abs(m:narrow(1, 1, l):sum()) < 0.000001)
+            -- checks that the valid entries are equal
+            mytester:assertTensorEq(t:narrow(1, 1, l), samples[sampleId])
+            if l < m:size(1) then
+               mytester:assert(m[l+1] == 1)
+            end
+            if l+1 < m:size(1) then
+               m = m:narrow(1, l+2, m:size(1)-l-1)
+               t = t:narrow(1, l+2, t:size(1)-l-1)
+            end
+         end
+      end
+   end
+end
+
+function rnntest.VariableLength_ToSamples()
+   local nSamples = 10
+   local maxLength = 20
+   for run=1,10 do
+      local lengths = torch.LongTensor(nSamples)
+      lengths:random(maxLength)
+      local samples = {}
+      for i=1,nSamples do
+         samples[i] = torch.rand(lengths[i], 5)
+      end
+      local output = torch.Tensor()
+      local mask = torch.ByteTensor()
+      local indexes, mappedLengths = output.nn.VariableLength_FromSamples(samples, output, mask)
+      local new_samples = output.nn.VariableLength_ToSamples(indexes, mappedLengths, output)
+      mytester:assert(#samples == #new_samples)
+      for i=1,nSamples do
+         mytester:assertTensorEq(samples[i], new_samples[i])
+      end
+   end
+end
+
+function rnntest.VariableLength_ToFinal()
+   local nSamples = 10
+   local maxLength = 20
+   for run=1,10 do
+      local lengths = torch.LongTensor(nSamples)
+      lengths:random(maxLength)
+      local samples = {}
+      for i=1,nSamples do
+         local t = torch.rand(lengths[i], 5)
+         samples[i] = t
+      end
+      local output = torch.Tensor()
+      local mask = torch.ByteTensor()
+      local indexes, mappedLengths = output.nn.VariableLength_FromSamples(samples, output, mask)
+
+      local final = torch.Tensor()
+      output.nn.VariableLength_ToFinal(indexes, mappedLengths, output, final)
+
+      for i=1,nSamples do
+         mytester:assertTensorEq(samples[i]:select(1, lengths[i]), final:select(1, i))
+      end
+   end
+end
+
+function rnntest.VariableLength_FromFinal()
+   torch.manualSeed(2)
+   local nSamples = 10
+   local maxLength = 20
+   for run=1,1 do
+      local lengths = torch.LongTensor(nSamples)
+      lengths:random(maxLength)
+      local samples = {}
+      for i=1,nSamples do
+         local t = torch.rand(lengths[i], 5)
+         samples[i] = t
+      end
+      local output = torch.Tensor()
+      local mask = torch.ByteTensor()
+      local indexes, mappedLengths = output.nn.VariableLength_FromSamples(samples, output, mask)
+
+      local final = torch.Tensor()
+      output.nn.VariableLength_ToFinal(indexes, mappedLengths, output, final)
+
+      local re_output = torch.Tensor()
+      output.nn.VariableLength_FromFinal(indexes, mappedLengths, final, re_output)
+
+      local new_samples = output.nn.VariableLength_ToSamples(indexes, mappedLengths, re_output)
+
+      for i=1,nSamples do
+         if lengths[i] > 1 then
+            mytester:assert(new_samples[i]:narrow(1, 1, lengths[i]-1):abs():sum() < 0.000001)
+         end
+         mytester:assertTensorEq(samples[i]:select(1, lengths[i]), new_samples[i]:select(1, lengths[i]))
+      end
+   end
+end
+
+function rnntest.VariableLength_lstm()
+   -- test seqlen x batchsize x hiddensize
+   local maxLength = 8
+   local batchSize = 3
+   local hiddenSize = 5
+   local nIndex = 20
+
+   local function testVL(testLM, lastOnly)
+      -- VL(LSTM): test forward
+
+      local input = {}
+      local lstm, vl, input2, output
+      if not testLM then
+         for i=1,batchSize do
+            input[i] = torch.randn(torch.random(1,maxLength), hiddenSize)
+         end
+
+         lstm = nn.SeqLSTM(hiddenSize, hiddenSize):maskZero()
+
+         input2 = torch.Tensor(maxLength, batchSize, hiddenSize):zero()
+      else
+         for i=1,batchSize do
+            input[i] = torch.Tensor(torch.random(1,maxLength)):random(1,nIndex)
+         end
+
+         lstm = nn.Sequential()
+            :add(nn.LookupTableMaskZero(nIndex, hiddenSize))
+            :add(nn.SeqLSTM(hiddenSize, hiddenSize):maskZero())
+
+         input2 = torch.Tensor(maxLength, batchSize):zero()
+      end
+
+      vl = nn.VariableLength(lstm:clone(), lastOnly)
+
+      local output = vl:forward(input)
+
+      for i=1,batchSize do
+         local seqlen = input[i]:size(1)
+         input2:select(2,i):narrow(1,maxLength-seqlen+1,seqlen):copy(input[i])
+      end
+
+      local output2 = lstm:forward(input2)
+
+      if not lastOnly then
+         for i=1,batchSize do
+            local out1 = output[i]
+            local seqlen = input[i]:size(1)
+            mytester:assert(out1:size(1) == seqlen)
+            local out2 = output2:select(2,i):narrow(1,maxLength-seqlen+1,seqlen)
+            mytester:assertTensorEq(out1, out2, 0.00000001)
+         end
+      else
+         mytester:assertTensorEq(output, output2[maxLength], 0.000001)
+      end
+
+      -- VL(LSTM): test backward
+
+      local gradOutput, gradOutput2
+      if not lastOnly then
+         gradOutput = {}
+         for i=1,batchSize do
+            gradOutput[i] = torch.randn(output[i]:size())
+         end
+
+         gradOutput2 = torch.Tensor(maxLength, batchSize, hiddenSize):zero()
+         for i=1,batchSize do
+            local seqlen = gradOutput[i]:size(1)
+            gradOutput2:select(2,i):narrow(1,maxLength-seqlen+1,seqlen):copy(gradOutput[i])
+         end
+      else
+         gradOutput = torch.randn(batchSize, hiddenSize)
+         gradOutput2 = torch.Tensor(maxLength, batchSize, hiddenSize):zero()
+         gradOutput2[maxLength]:copy(gradOutput)
+      end
+
+      vl:zeroGradParameters()
+      local gradInput = vl:backward(input, gradOutput)
+
+      for i=1,batchSize do
+         mytester:assert(input[i]:isSameSizeAs(gradInput[i]))
+      end
+
+      lstm:zeroGradParameters()
+      local gradInput2 = lstm:backward(input2, gradOutput2)
+
+      for i=1,batchSize do
+         local gradIn1 = gradInput[i]
+         local seqlen = input[i]:size(1)
+         mytester:assert(gradIn1:size(1) == seqlen)
+         local gradIn2 = gradInput2:select(2,i):narrow(1,maxLength-seqlen+1,seqlen)
+         mytester:assertTensorEq(gradIn1, gradIn2, 0.00000001)
+      end
+
+      local params, gradParams = vl:parameters()
+      local params2, gradParams2 = lstm:parameters()
+
+      for i=1,#params2 do
+         mytester:assertTensorEq(gradParams[i], gradParams2[i], 0.000001)
+      end
+   end
+
+   -- testVL(testLstm, lastOnly)
+   testVL(false, false)
+   testVL(true, false)
+   testVL(false, true)
+   testVL(true, true)
+end
+
 function rnn.test(tests, benchmark_, exclude)
    mytester = torch.Tester()
    mytester:add(rnntest)
