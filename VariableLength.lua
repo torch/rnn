@@ -104,7 +104,7 @@ function VariableLength:clearState()
    else
       self.output = {}
    end
-   self._gradOutput:set()
-   self._input:set()
+   self._gradOutput = nil
+   self._input = nil
    return parent.clearState(self)
 end
