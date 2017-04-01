@@ -61,6 +61,9 @@ torch.include('rnn', 'SeqGRU.lua')
 torch.include('rnn', 'SeqReverseSequence.lua')
 torch.include('rnn', 'SeqBRNN.lua')
 
+-- step modules
+torch.include('rnn', 'StepLSTM.lua')
+
 -- recurrent criterions:
 torch.include('rnn', 'SequencerCriterion.lua')
 torch.include('rnn', 'RepeaterCriterion.lua')

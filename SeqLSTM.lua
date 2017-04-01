@@ -378,7 +378,7 @@ function SeqLSTM:backward(input, gradOutput, scale)
       local grad_a_sum = self.buffer3:resize(1, 4 * H):sum(grad_a, 1)
       grad_b:add(scale, grad_a_sum)
 
-      self.grad_next_h = torch.mm(grad_a, Wh:t())
+      self.grad_next_h = torch.mm(grad_a, Wh:t()) -- TODO : use buffer
       grad_next_c:cmul(f)
 
    end
