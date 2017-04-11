@@ -7092,6 +7092,67 @@ function rnntest.StepLSTM()
    end
 end
 
+function rnntest.RecLSTM()
+   local seqlen, batchsize = 3, 4
+   local inputsize, outputsize = 2, 5
+   local reclstm = nn.RecLSTM(inputsize, outputsize)
+   local lstm = nn.Sequencer(reclstm)
+
+   local input = torch.Tensor(seqlen, batchsize, inputsize)
+   local output = lstm:forward(input)
+
+   local seqlstm = nn.SeqLSTM(inputsize, outputsize)
+   seqlstm.weight:copy(reclstm.modules[1].weight)
+   seqlstm.bias:copy(reclstm.modules[1].bias)
+
+   local output2 = seqlstm:forward(input)
+   mytester:assertTensorEq(output, output2, 0.000001)
+
+   lstm:zeroGradParameters()
+   seqlstm:zeroGradParameters()
+
+   local gradOutput = torch.Tensor(seqlen, batchsize, outputsize)
+   local gradInput = lstm:backward(input, gradOutput)
+
+   local gradInput2 = seqlstm:backward(input, gradOutput)
+   mytester:assertTensorEq(gradInput, gradInput2, 0.000001)
+
+   local params, gradParams = lstm:parameters()
+   local params2, gradParams2 = seqlstm:parameters()
+
+   for i=1,#params2 do
+      mytester:assertTensorEq(gradParams[i], gradParams2[i], 0.0000001)
+   end
+end
+
+function rnntest.RecLSTM_maskzero()
+   -- tests that it works with non-masked inputs regardless of maskzero's value.
+   -- Note that more maskzero = true tests with masked inputs are in SeqLSTM unit test.
+   local T, N, D, H = 3, 2, 4, 5
+   local seqlstm = nn.Sequencer(nn.RecLSTM(D,H))
+   seqlstm.maskzero = false
+   local seqlstm2 = seqlstm:clone()
+   seqlstm2.maskzero = true
+
+   local input = torch.randn(T, N, D)
+   local gradOutput = torch.randn(T, N, H)
+
+   local output = seqlstm:forward(input)
+   local output2 = seqlstm2:forward(input)
+
+   mytester:assertTensorEq(output, output2, 0.000001)
+
+   seqlstm:zeroGradParameters()
+   local gradInput = seqlstm:backward(input, gradOutput)
+   seqlstm2:zeroGradParameters()
+   local gradInput2 = seqlstm2:backward(input, gradOutput)
+
+   mytester:assertTensorEq(gradInput, gradInput2, 0.000001)
+
+   local params, gradParams = seqlstm:getParameters()
+   local params2, gradParams2 = seqlstm2:getParameters()
+
+
 function rnn.test(tests, benchmark_, exclude)
    mytester = torch.Tester()
    mytester:add(rnntest)

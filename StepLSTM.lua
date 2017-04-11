@@ -18,8 +18,6 @@ function StepLSTM:__init(inputsize, outputsize)
    self:reset()
 
    self.gates = torch.Tensor() -- batchsize x 4*outputsize
-   self.grad_gates = torch.Tensor() -- batchsize x 4*outputsize
-   self.grad_gates_sum = torch.Tensor() -- 1 x 4*outputsize
 
    self.output = {torch.Tensor(), torch.Tensor()}
    self.gradInput = {torch.Tensor(), torch.Tensor(), torch.Tensor()}
@@ -94,10 +92,10 @@ function StepLSTM:updateOutput(input)
 
    if self.maskzero then
       -- build mask from input
-      self._zeroMask = self._zeroMask or cur_x.new()
-      self._zeroMask:norm(cur_x, 2, 2)
+      local zero_mask = torch.getBuffer('StepLSTM', 'zero_mask', cur_x)
+      zero_mask:norm(cur_x, 2, 2)
       self.zeroMask = self.zeroMask or ((torch.type(cur_x) == 'torch.CudaTensor') and torch.CudaByteTensor() or torch.ByteTensor())
-      self._zeroMask.eq(self.zeroMask, self._zeroMask, 0)
+      zero_mask.eq(self.zeroMask, zero_mask, 0)
       -- zero masked output
       self:recursiveMask({next_h, next_c, cur_gates}, self.zeroMask)
    end
@@ -128,21 +126,15 @@ function StepLSTM:backward(input, gradOutput, scale)
    local grad_Wh = self.gradWeight:narrow(1,inputsize+1,outputsize)
    local grad_b = self.gradBias
 
-   local gates, grad_gates = self.gates, self.grad_gates
+   local gates = self.gates
+
+   local grad_gates = torch.getBuffer('StepLSTM', 'grad_gates', gates) -- batchsize x 4*outputsize
+   local grad_gates_sum = torch.getBuffer('StepLSTM', 'grad_gates_sum', gates) -- 1 x 4*outputsize
 
    -- backward
-   if self.maskzero and torch.type(self) ~= 'nn.StepLSTM' then
-      error"Not Tested: carried over from SeqLSTM. Test this then remove this line. "
-      -- we only do this for sub-classes (LSTM doesn't need it)
-      -- build mask from input
-      local cur_x = x[t]
-      local vectorDim = cur_x:dim()
-      self._zeroMask = self._zeroMask or cur_x.new()
-      self._zeroMask:norm(cur_x, 2, vectorDim)
-      self.zeroMask = self.zeroMask or ((torch.type(cur_x) == 'torch.CudaTensor') and torch.CudaByteTensor() or torch.ByteTensor())
-      self._zeroMask.eq(self.zeroMask, self._zeroMask, 0)
+   if self.maskzero then
       -- zero masked gradOutput
-      self:recursiveMask(self.grad_next_h, self.zeroMask)
+      self:recursiveMask({grad_next_h, grad_next_c}, self.zeroMask)
    end
 
    local input_gate = gates[{{}, {1, outputsize}}]
@@ -176,8 +168,8 @@ function StepLSTM:backward(input, gradOutput, scale)
    grad_cur_x:mm(grad_gates, Wx:t())
    grad_Wx:addmm(scale, cur_x:t(), grad_gates)
    grad_Wh:addmm(scale, prev_h:t(), grad_gates)
-   self.grad_gates_sum:resize(1, 4 * outputsize):sum(grad_gates, 1)
-   grad_b:add(scale, self.grad_gates_sum)
+   grad_gates_sum:resize(1, 4 * outputsize):sum(grad_gates, 1)
+   grad_b:add(scale, grad_gates_sum)
 
    grad_prev_h:mm(grad_gates, Wh:t())
    grad_prev_c:cmul(forget_gate)
@@ -201,8 +193,6 @@ end
 
 function StepLSTM:clearState()
    self.gates:set()
-   self.grad_gates:set()
-   self.grad_gates_sum:set()
 
    self.output[1]:set(); self.output[2]:set()
    self.gradInput[1]:set(); self.gradInput[2]:set(); self.gradInput[3]:set()
@@ -219,8 +209,3 @@ function StepLSTM:type(type, ...)
 end
 
 StepLSTM.toFastLSTM = nn.SeqLSTM.toFastLSTM
-
-function StepLSTM:maskZero()
-   self.maskzero = true
-   return self
-end

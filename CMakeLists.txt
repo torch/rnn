@@ -52,6 +52,8 @@ SET(luasrc
   test/test.lua
   VariableLength.lua
   StepLSTM.lua
+  RecLSTM.lua
+  utils.lua
 )
 
 ADD_TORCH_PACKAGE(rnn "${src}" "${luasrc}" "An RNN library for Torch")

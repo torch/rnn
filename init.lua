@@ -14,6 +14,7 @@ paths.require 'librnn'
 unpack = unpack or table.unpack
 
 torch.include('rnn', 'recursiveUtils.lua')
+torch.include('rnn', 'utils.lua')
 
 -- extensions to nn.Module
 torch.include('rnn', 'Module.lua')
@@ -40,6 +41,7 @@ torch.include('rnn', 'AbstractRecurrent.lua')
 torch.include('rnn', 'Recurrent.lua')
 torch.include('rnn', 'LSTM.lua')
 torch.include('rnn', 'FastLSTM.lua')
+torch.include('rnn', 'RecLSTM.lua')
 torch.include('rnn', 'GRU.lua')
 torch.include('rnn', 'Mufuru.lua')
 torch.include('rnn', 'Recursor.lua')
