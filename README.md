@@ -7,8 +7,8 @@ This library includes documentation for the following objects:
 Modules that consider successive calls to `forward` as different time-steps in a sequence :
  * [AbstractRecurrent](#rnn.AbstractRecurrent) : an abstract class inherited by Recurrent and LSTM;
  * [LSTM](#rnn.LSTM) : a vanilla Long-Short Term Memory module;
-  * [RecLSTM](#rnn.RecLSTM) : a faster LSTM (based on SeqLSTM) that doesn't use peephole connections;
-  * [FastLSTM](#rnn.FastLSTM) (DEPRECATED) : an LSTM with optional support for batch normalization;
+   * [RecLSTM](#rnn.RecLSTM) : a faster LSTM (based on SeqLSTM) that doesn't use peephole connections;
+   * [FastLSTM](#rnn.FastLSTM) (DEPRECATED) : an LSTM with optional support for batch normalization;
  * [GRU](#rnn.GRU) : Gated Recurrent Units module;
  * [Recursor](#rnn.Recursor) : decorates a module to make it conform to the [AbstractRecurrent](#rnn.AbstractRecurrent) interface;
  * [Recurrence](#rnn.Recurrence) : decorates a module that outputs `output(t)` given `{input(t), output(t-1)}`;
@@ -20,7 +20,7 @@ Modules that `forward` entire sequences through a decorated `AbstractRecurrent` 
  * [AbstractSequencer](#rnn.AbstractSequencer) : an abstract class inherited by Sequencer, Repeater, RecurrentAttention, etc.;
  * [Sequencer](#rnn.Sequencer) : applies an encapsulated module to all elements in an input sequence  (Tensor or Table);
  * [SeqLSTM](#rnn.SeqLSTM) : a very fast version of `nn.Sequencer(nn.FastLSTM)` where the `input` and `output` are tensors;
-  * [SeqLSTMP](#rnn.SeqLSTMP) : `SeqLSTM` with a projection layer;
+   * [SeqLSTMP](#rnn.SeqLSTMP) : `SeqLSTM` with a projection layer;
  * [SeqGRU](#rnn.SeqGRU) : a very fast version of `nn.Sequencer(nn.GRU)` where the `input` and `output` are tensors;
  * [SeqBRNN](#rnn.SeqBRNN) : Bidirectional RNN based on SeqLSTM;
  * [BiSequencer](#rnn.BiSequencer) : used for implementing Bidirectional RNNs and LSTMs;
