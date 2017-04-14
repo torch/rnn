@@ -6,14 +6,15 @@ This library includes documentation for the following objects:
 
 Modules that consider successive calls to `forward` as different time-steps in a sequence :
  * [AbstractRecurrent](#rnn.AbstractRecurrent) : an abstract class inherited by Recurrent and LSTM;
- * [Recurrent](#rnn.Recurrent) : a generalized recurrent neural network container;
  * [LSTM](#rnn.LSTM) : a vanilla Long-Short Term Memory module;
-  * [FastLSTM](#rnn.FastLSTM) : a faster [LSTM](#rnn.LSTM) with optional support for batch normalization;
+  * [RecLSTM](#rnn.RecLSTM) : a faster LSTM (based on SeqLSTM) that doesn't use peephole connections;
+  * [FastLSTM](#rnn.FastLSTM) (DEPRECATED) : an LSTM with optional support for batch normalization;
  * [GRU](#rnn.GRU) : Gated Recurrent Units module;
- * [MuFuRu](#rnn.MuFuRu) : [Multi-function Recurrent Unit](https://arxiv.org/abs/1606.03002) module;
  * [Recursor](#rnn.Recursor) : decorates a module to make it conform to the [AbstractRecurrent](#rnn.AbstractRecurrent) interface;
  * [Recurrence](#rnn.Recurrence) : decorates a module that outputs `output(t)` given `{input(t), output(t-1)}`;
  * [NormStabilizer](#rnn.NormStabilizer) : implements [norm-stabilization](http://arxiv.org/abs/1511.08400) criterion (add this module between RNNs);
+ * [MuFuRu](#rnn.MuFuRu) : [Multi-function Recurrent Unit](https://arxiv.org/abs/1606.03002) module;
+ * [Recurrent](#rnn.Recurrent) (DEPRECATED) : a generalized recurrent neural network container;
 
 Modules that `forward` entire sequences through a decorated `AbstractRecurrent` instance :
  * [AbstractSequencer](#rnn.AbstractSequencer) : an abstract class inherited by Sequencer, Repeater, RecurrentAttention, etc.;
@@ -222,6 +223,9 @@ sequence.
 
 <a name='rnn.Recurrent'></a>
 ## Recurrent ##
+
+DEPRECATED : use [Recurrence](#rnn.Recurrence) instead.
+
 References :
  * A. [Sutsekever Thesis Sec. 2.5 and 2.8](http://www.cs.utoronto.ca/~ilya/pubs/ilya_sutskever_phd_thesis.pdf)
  * B. [Mikolov Thesis Sec. 3.2 and 3.3](http://www.fit.vutbr.cz/~imikolov/rnnlm/thesis.pdf)
@@ -346,8 +350,62 @@ through inheritance by overriding the different factory methods :
 Note that we recommend decorating the `LSTM` with a `Sequencer`
 (refer to [this](#rnn.Recurrent.Sequencer) for details).
 
+<a name='rnn.RecLSTM'></a>
+## RecLSTM ##
+
+A faster version of the [LSTM](#rnn.LSTM) based on [SeqLSTM](#rnn.SeqLSTM).
+Internally, `RecLSTM` uses a single module [StepLSTM](#rnn.StepLSTM), which is cloned (with shared parameters) for each time-step.
+The speedup is obtained by computing every time-step using a single module.
+This also makes the model memory efficient.
+
+Note that `RecLSTM` does not use peephole connections between cell and gates. The algorithm from `LSTM` changes as follows:
+```lua
+i[t] = σ(W[x->i]x[t] + W[h->i]h[t−1] + b[1->i])                      (1)
+f[t] = σ(W[x->f]x[t] + W[h->f]h[t−1] + b[1->f])                      (2)
+z[t] = tanh(W[x->c]x[t] + W[h->c]h[t−1] + b[1->c])                   (3)
+c[t] = f[t]c[t−1] + i[t]z[t]                                         (4)
+o[t] = σ(W[x->o]x[t] + W[h->o]h[t−1] + b[1->o])                      (5)
+h[t] = o[t]tanh(c[t])                                                (6)
+```
+i.e. omitting the summands `W[c->i]c[t−1]` (eq. 1), `W[c->f]c[t−1]` (eq. 2), and `W[c->o]c[t]` (eq. 5).
+
+<a name='rnn.StepLSTM'></a>
+### StepLSTM ###
+
+`StepLSTM` is a step-wise module that can be used inside an `AbstractRecurrent` module to implement an LSTM.
+For example, `StepLSTM` can be combined with [Recurrence](#rnn.Recurrence) (an `AbstractRecurrent` instance for create generic RNNs)
+to create an LSTM:
+
+```lua
+local steplstm = nn.StepLSTM(inputsize, outputsize)
+local stepmodule = nn.Sequential()
+  :add(nn.FlattenTable())
+  :add(steplstm)
+local reclstm = nn.Sequential()
+  :add(nn.Recurrence(stepmodule, {{outputsize}, {outputsize}}, 1, seqlen))
+  :add(nn.SelectTable(1))
+```
+
+The above `reclstm` is functionally equivalent to a `RecLSTM`, although the latter is more efficient.
+
+The `StepLSTM` thus efficiently implements a single LSTM time-step.
+Its efficient because it doesn't use any internal modules; it calls BLAS directly.
+`StepLSTM` is based on `SeqLSTM`.
+
+The `input` to `StepLSTM` looks like:
+```lua
+{input[t], hidden[t-1], cell[t-1])}
+```
+where `t` indexes the time-step.
+The `output` is:
+```lua
+{hidden[t], cell[t]}
+```
+
 <a name='rnn.FastLSTM'></a>
 ## FastLSTM ##
+
+DEPRECATED : use the much faster [RecLSTM](#rnn.RecLSTM) instead
 
 A faster version of the [LSTM](#rnn.LSTM).
 Basically, the input, forget and output gates, as well as the hidden state are computed at one fellswoop.
