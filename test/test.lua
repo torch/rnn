@@ -7126,15 +7126,17 @@ function rnntest.RecLSTM()
 end
 
 function rnntest.RecLSTM_maskzero()
-   -- tests that it works with non-masked inputs regardless of maskzero's value.
-   -- Note that more maskzero = true tests with masked inputs are in SeqLSTM unit test.
    local T, N, D, H = 3, 2, 4, 5
-   local seqlstm = nn.Sequencer(nn.RecLSTM(D,H))
-   seqlstm.maskzero = false
-   local seqlstm2 = seqlstm:clone()
+   local reclstm = nn.RecLSTM(D,H):maskZero()
+   local seqlstm = nn.Sequencer(reclstm)
+   local seqlstm2 = nn.SeqLSTM(D,H)
+   seqlstm2.weight:copy(reclstm.modules[1].weight)
+   seqlstm2.bias:copy(reclstm.modules[1].bias)
    seqlstm2.maskzero = true
 
    local input = torch.randn(T, N, D)
+   input[{2,1}]:fill(0)
+   input[{3,2}]:fill(0)
    local gradOutput = torch.randn(T, N, H)
 
    local output = seqlstm:forward(input)
@@ -7149,9 +7151,13 @@ function rnntest.RecLSTM_maskzero()
 
    mytester:assertTensorEq(gradInput, gradInput2, 0.000001)
 
-   local params, gradParams = seqlstm:getParameters()
-   local params2, gradParams2 = seqlstm2:getParameters()
+   local params, gradParams = seqlstm:parameters()
+   local params2, gradParams2 = seqlstm2:parameters()
 
+   for i=1,#params do
+      mytester:assertTensorEq(gradParams[i], gradParams[i], 0.0000001)
+   end
+end
 
 function rnn.test(tests, benchmark_, exclude)
    mytester = torch.Tester()
