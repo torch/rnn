@@ -33,7 +33,7 @@ cmd:option('--k', 100, 'how many noise samples to use for NCE')
 cmd:option('--continue', '', 'path to model for which training should be continued. Note that current options (except for device, cuda and tiny) will be ignored.')
 cmd:option('--Z', 1, 'normalization constant for NCE module (-1 approximates it from first batch).')
 cmd:option('--rownoise', false, 'sample k noise samples for each row for NCE module')
--- rnn layer 
+-- rnn layer
 cmd:option('--seqlen', 50, 'sequence length : back-propagate through time (BPTT) for this many time-steps')
 cmd:option('--inputsize', -1, 'size of lookup table embeddings. -1 defaults to hiddensize[1]')
 cmd:option('--hiddensize', '{256,256}', 'number of hidden units used at output of each recurrent layer. When more than one is specified, RNN/LSTMs/GRUs are stacked')
@@ -42,7 +42,7 @@ cmd:option('--dropout', 0, 'ancelossy dropout with this probability after each r
 -- data
 cmd:option('--batchsize', 128, 'number of examples per batch')
 cmd:option('--trainsize', 400000, 'number of train time-steps seen between each epoch')
-cmd:option('--validsize', 40000, 'number of valid time-steps used for early stopping and cross-validation') 
+cmd:option('--validsize', 40000, 'number of valid time-steps used for early stopping and cross-validation')
 cmd:option('--savepath', paths.concat(dl.SAVE_PATH, 'rnnlm'), 'path to directory where experiment log (includes model) will be saved')
 cmd:option('--id', '', 'id string of this experiment (used to name output file) (defaults to a unique id)')
 cmd:option('--tiny', false, 'use train_tiny.th7 training file')
@@ -60,9 +60,9 @@ if not opt.silent then
 end
 
 if opt.cuda then -- do this before building model to prevent segfault
-   require 'cunn' 
+   require 'cunn'
    cutorch.setDevice(opt.device)
-end 
+end
 
 local xplog, lm, criterion, targetmodule
 if opt.continue ~= '' then
@@ -84,8 +84,8 @@ end
 --[[ data set ]]--
 
 local trainset, validset, testset = dl.loadGBW({opt.batchsize,opt.batchsize,opt.batchsize}, opt.tiny and 'train_tiny.th7' or nil)
-if not opt.silent then 
-   print("Vocabulary size : "..#trainset.ivocab) 
+if not opt.silent then
+   print("Vocabulary size : "..#trainset.ivocab)
    print("Train set split into "..opt.batchsize.." sequences of length "..trainset:size())
 end
 
@@ -105,8 +105,8 @@ if not lm then
    -- rnn layers
    local inputsize = opt.inputsize
    for i,hiddensize in ipairs(opt.hiddensize) do
-      -- this is a faster version of nn.Sequencer(nn.FastLSTM(inpusize, hiddensize))
-      local rnn =  opt.projsize < 1 and nn.SeqLSTM(inputsize, hiddensize) 
+      -- this is a faster version of nn.Sequencer(nn.RecSTM(inpusize, hiddensize))
+      local rnn =  opt.projsize < 1 and nn.SeqLSTM(inputsize, hiddensize)
          or nn.SeqLSTMP(inputsize, opt.projsize, hiddensize) -- LSTM with a projection layer
       rnn.maskzero = true
       lm:add(rnn)
@@ -131,7 +131,7 @@ if not lm then
 
    -- encapsulate stepmodule into a Sequencer
    lm:add(nn.Sequencer(nn.MaskZero(ncemodule, 1)))
-   
+
    -- remember previous state between batches
    lm:remember()
 
@@ -164,7 +164,7 @@ if not (criterion and targetmodule) then
          :add(nn.Convert())
          :add(targetmodule)
    end
-    
+
    criterion = nn.SequencerCriterion(crit)
 end
 
@@ -208,7 +208,7 @@ while opt.maxepoch <= 0 or epoch <= opt.maxepoch do
    print("Epoch #"..epoch.." :")
 
    -- 1. training
-   
+
    local a = torch.Timer()
    lm:training()
    local sumErr = 0
@@ -219,12 +219,12 @@ while opt.maxepoch <= 0 or epoch <= opt.maxepoch do
       local outputs = lm:forward(inputs)
       local err = criterion:forward(outputs, targets)
       sumErr = sumErr + err
-      -- backward 
+      -- backward
       local gradOutputs = criterion:backward(outputs, targets)
       local a = torch.Timer()
       lm:zeroGradParameters()
       lm:backward(inputs, gradOutputs)
-      
+
       -- update
       if opt.cutoff > 0 then
          local norm = lm:gradParamClip(opt.cutoff) -- affects gradParams
@@ -243,7 +243,7 @@ while opt.maxepoch <= 0 or epoch <= opt.maxepoch do
       end
 
    end
-   
+
    -- learning rate decay
    if opt.schedule then
       opt.lr = opt.schedule[epoch] or opt.lr
@@ -251,7 +251,7 @@ while opt.maxepoch <= 0 or epoch <= opt.maxepoch do
       opt.lr = opt.lr + (opt.minlr - opt.startlr)/opt.saturate
    end
    opt.lr = math.max(opt.minlr, opt.lr)
-   
+
    if not opt.silent then
       print("learning rate", opt.lr)
       if opt.meanNorm then
@@ -277,7 +277,7 @@ while opt.maxepoch <= 0 or epoch <= opt.maxepoch do
       local outputs = lm:forward{inputs, targets}
       local err = criterion:forward(outputs, targets)
       sumErr = sumErr + err
-      
+
       if opt.progress then
          xlua.progress(i, opt.validsize)
       end
@@ -293,7 +293,7 @@ while opt.maxepoch <= 0 or epoch <= opt.maxepoch do
    if nceloss < xplog.minvalnceloss then
       -- save best version of model
       xplog.minvalnceloss = nceloss
-      xplog.epoch = epoch 
+      xplog.epoch = epoch
       local filename = paths.concat(opt.savepath, opt.id..'.t7')
       if not opt.dontsave then
          print("Found new minima. Saving to "..filename)

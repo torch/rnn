@@ -1,5 +1,6 @@
 ------------------------------------------------------------------------
 --[[ Recurrent ]]--
+-- DEPRECATED : use Recurrence instead.
 -- Ref. A.: http://goo.gl/vtVGkO (Mikolov et al.)
 -- B. http://goo.gl/hu1Lqm
 -- Processes the sequence one timestep (forward/backward) at a time.

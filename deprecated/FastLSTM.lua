@@ -1,5 +1,6 @@
 ------------------------------------------------------------------------
 --[[ FastLSTM ]]--
+-- DEPRECATED : use RecLSTM instead
 -- Long Short Term Memory architecture.
 -- Ref. A.: http://arxiv.org/pdf/1303.5778v1 (blueprint for this module)
 -- B. http://web.eecs.utk.edu/~itamar/courses/ECE-692/Bobby_paper1.pdf

@@ -49,7 +49,7 @@ cmd:option('--imageHiddenSize', 256, 'size of hidden layer combining glimpse and
 --[[ recurrent layer ]]--
 cmd:option('--rho', 7, 'back-propagate through time (BPTT) for rho time-steps')
 cmd:option('--hiddenSize', 256, 'number of hidden units used in Simple RNN.')
-cmd:option('--FastLSTM', false, 'use LSTM instead of linear layer')
+cmd:option('--LSTM', false, 'use LSTM instead of linear layer')
 
 --[[ data ]]--
 cmd:option('--dataset', 'Mnist', 'which dataset to use : Mnist | TranslattedMnist | etc')
@@ -112,8 +112,8 @@ else
    glimpse:add(nn.Linear(opt.imageHiddenSize, opt.hiddenSize))
 
    -- rnn recurrent layer
-   if opt.FastLSTM then
-     recurrent = nn.FastLSTM(opt.hiddenSize, opt.hiddenSize)
+   if opt.LSTM then
+     recurrent = nn.RecLSTM(opt.hiddenSize, opt.hiddenSize)
    else
      recurrent = nn.Linear(opt.hiddenSize, opt.hiddenSize)
    end

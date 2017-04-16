@@ -5,7 +5,7 @@ assert(dpnn.version > 1, "Please update dpnn : luarocks install dpnn")
 
 -- create global rnn table:
 rnn = {}
-rnn.version = 2.2 -- C rnn library : VariableLength
+rnn.version = 2.3 -- deprecated Recurrent and FastLSTM
 
 -- c lib:
 require "paths"
@@ -38,9 +38,7 @@ torch.include('rnn', 'LookupTableMaskZero.lua')
 torch.include('rnn', 'MaskZero.lua')
 torch.include('rnn', 'TrimZero.lua')
 torch.include('rnn', 'AbstractRecurrent.lua')
-torch.include('rnn', 'Recurrent.lua')
 torch.include('rnn', 'LSTM.lua')
-torch.include('rnn', 'FastLSTM.lua')
 torch.include('rnn', 'RecLSTM.lua')
 torch.include('rnn', 'GRU.lua')
 torch.include('rnn', 'Mufuru.lua')
@@ -70,6 +68,10 @@ torch.include('rnn', 'StepLSTM.lua')
 torch.include('rnn', 'SequencerCriterion.lua')
 torch.include('rnn', 'RepeaterCriterion.lua')
 torch.include('rnn', 'MaskZeroCriterion.lua')
+
+-- deprecated modules
+torch.include('rnn', 'FastLSTM.lua')
+torch.include('rnn', 'Recurrent.lua')
 
 -- prevent likely name conflicts
 nn.rnn = rnn

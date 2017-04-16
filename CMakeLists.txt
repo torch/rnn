@@ -20,7 +20,7 @@ SET(luasrc
   CopyGrad.lua
   Dropout.lua
   ExpandAs.lua
-  FastLSTM.lua
+  deprecated/FastLSTM.lua
   GRU.lua
   LinearNoBias.lua
   LookupTableMaskZero.lua
@@ -32,7 +32,7 @@ SET(luasrc
   NormStabilizer.lua
   Padding.lua
   Recurrence.lua
-  Recurrent.lua
+  deprecated/Recurrent.lua
   RecurrentAttention.lua
   recursiveUtils.lua
   Recursor.lua
