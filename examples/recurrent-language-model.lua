@@ -94,20 +94,19 @@ for i,hiddensize in ipairs(opt.hiddensize) do
    if opt.gru then -- Gated Recurrent Units
       rnn = nn.GRU(inputsize, hiddensize, nil, opt.dropout/2)
    elseif opt.lstm then -- Long Short Term Memory units
-      require 'nngraph'
-      nn.FastLSTM.usenngraph = true -- faster
-      nn.FastLSTM.bn = opt.bn
-      rnn = nn.FastLSTM(inputsize, hiddensize)
+      rnn = nn.RecLSTM(inputsize, hiddensize)
    elseif opt.mfru then -- Multi Function Recurrent Unit
       rnn = nn.MuFuRu(inputsize, hiddensize)
-   else -- simple recurrent neural network
+   elseif i == 1 then -- simple recurrent neural network
       local rm =  nn.Sequential() -- input is {x[t], h[t-1]}
          :add(nn.ParallelTable()
-            :add(i==1 and nn.Identity() or nn.Linear(inputsize, hiddensize)) -- input layer
+            :add(nn.Identity()) -- input layer
             :add(nn.Linear(hiddensize, hiddensize))) -- recurrent layer
          :add(nn.CAddTable()) -- merge
          :add(nn.Sigmoid()) -- transfer
       rnn = nn.Recurrence(rm, hiddensize, 1)
+   else
+      rnn = nn.LinearRNN(hiddensize, hiddensize)
    end
 
    stepmodule:add(rnn)

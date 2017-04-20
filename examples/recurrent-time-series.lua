@@ -1,11 +1,11 @@
--- Multi-variate time-series example 
+-- Multi-variate time-series example
 
 require 'rnn'
 
 cmd = torch.CmdLine()
 cmd:text()
 cmd:text('Train a multivariate time-series model using RNN')
-cmd:option('--rho', 5, 'maximum number of time steps for back-propagate through time (BPTT)')
+cmd:option('--seqlen', 5, 'maximum number of time steps for back-propagate through time (BPTT)')
 cmd:option('--multiSize', 6, 'number of random variables as input and output')
 cmd:option('--hiddenSize', 10, 'number of hidden units used at output of the recurrent layer')
 cmd:option('--dataSize', 100, 'total number of time-steps in dataset')
@@ -53,20 +53,12 @@ print('Sequence:'); print(sequence)
 
 offsets = torch.LongTensor(opt.batchSize):random(1,opt.dataSize)
 
--- RNN
-r = nn.Recurrent(
-   opt.hiddenSize, -- size of output
-   nn.Linear(opt.multiSize, opt.hiddenSize), -- input layer
-   nn.Linear(opt.hiddenSize, opt.hiddenSize), -- recurrent layer
-   nn.Sigmoid(), -- transfer function
-   opt.rho
-)
-
+-- Simple RNN
 rnn = nn.Sequential()
-   :add(r)
+   :add(nn.LinearRNN(opt.multiSize, opt.hiddenSize))
    :add(nn.Linear(opt.hiddenSize, opt.multiSize))
 
-criterion = nn.MSECriterion() 
+criterion = nn.MSECriterion()
 
 -- use Sequencer for better data handling
 rnn = nn.Sequencer(rnn)
@@ -79,12 +71,12 @@ print(rnn)
 minErr = opt.multiSize -- report min error
 minK = 0
 avgErrs = torch.Tensor(opt.nIterations):fill(0)
-for k = 1, opt.nIterations do 
+for k = 1, opt.nIterations do
 
-   -- 1. create a sequence of rho time-steps
-   
+   -- 1. create a sequence of seqlen time-steps
+
    local inputs, targets = {}, {}
-   for step = 1, opt.rho do
+   for step = 1, opt.seqlen do
       -- batch of inputs
       inputs[step] = inputs[step] or sequence.new()
       inputs[step]:index(sequence, 1, offsets)
@@ -99,10 +91,10 @@ for k = 1, opt.nIterations do
 
    local outputs = rnn:forward(inputs)
    local err = criterion:forward(outputs, targets)
-   
+
    -- report errors
-   
-   print('Iter: ' .. k .. '   Err: ' .. err)   
+
+   print('Iter: ' .. k .. '   Err: ' .. err)
    if opt.plot then
       logger:add{['Err'] = err}
       logger:style{['Err'] = '-'}
@@ -116,14 +108,14 @@ for k = 1, opt.nIterations do
    end
 
    -- 3. backward sequence through rnn (i.e. backprop through time)
-   
+
    rnn:zeroGradParameters()
-   
+
    local gradOutputs = criterion:backward(outputs, targets)
    local gradInputs = rnn:backward(inputs, gradOutputs)
 
    -- 4. updates parameters
-   
+
    rnn:updateParameters(opt.learningRate)
 end
 

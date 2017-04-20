@@ -7159,6 +7159,49 @@ function rnntest.RecLSTM_maskzero()
    end
 end
 
+function rnntest.LinearRNN()
+   local inputsize, outputsize = 3, 4
+   local seqlen, batchsize = 5, 2
+
+   local input = torch.randn(seqlen, batchsize, inputsize)
+   local gradOutput = torch.randn(seqlen, batchsize, outputsize)
+
+   local lrnn = nn.Sequencer(nn.LinearRNN(inputsize, outputsize))
+
+   local output = lrnn:forward(input)
+   lrnn:zeroGradParameters()
+   local gradInput = lrnn:backward(input, gradOutput)
+
+   mytester:assert(output:isSameSizeAs(gradOutput))
+   mytester:assert(gradInput:isSameSizeAs(input))
+
+   local params, gradParams = lrnn:parameters()
+   for i=1,2 do
+      mytester:assert(gradParams[i]:abs():mean() > 0.000001)
+   end
+end
+
+function rnntest.LookupRNN()
+   local nindex, outputsize = 3, 4
+   local seqlen, batchsize = 5, 2
+
+   local input = torch.LongTensor(seqlen, batchsize):random(1,nindex)
+   local gradOutput = torch.randn(seqlen, batchsize, outputsize)
+
+   local lrnn = nn.Sequencer(nn.LookupRNN(nindex, outputsize))
+
+   local output = lrnn:forward(input)
+   lrnn:zeroGradParameters()
+   lrnn:backward(input, gradOutput)
+
+   mytester:assert(output:isSameSizeAs(gradOutput))
+
+   local params, gradParams = lrnn:parameters()
+   for i=1,2 do
+      mytester:assert(gradParams[i]:abs():mean() > 0.000001)
+   end
+end
+
 function rnn.test(tests, benchmark_, exclude)
    mytester = torch.Tester()
    mytester:add(rnntest)

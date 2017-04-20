@@ -4,9 +4,9 @@ require 'rnn'
 torch.manualSeed(0)
 math.randomseed(0)
 
--- hyper-parameters 
+-- hyper-parameters
 batchSize = 8
-rho = 10 -- sequence length
+seqlen = 10 -- sequence length
 hiddenSize = 5
 nIndex = 10
 lr = 0.1
@@ -17,7 +17,7 @@ local sharedLookupTable = nn.LookupTableMaskZero(nIndex, hiddenSize)
 -- forward rnn
 local fwd = nn.Sequential()
    :add(sharedLookupTable)
-   :add(nn.FastLSTM(hiddenSize, hiddenSize):maskZero(1))
+   :add(nn.RecLSTM(hiddenSize, hiddenSize):maskZero(1))
 
 -- internally, rnn will be wrapped into a Recursor to make it an AbstractRecurrent instance.
 fwdSeq = nn.Sequencer(fwd)
@@ -25,12 +25,12 @@ fwdSeq = nn.Sequencer(fwd)
 -- backward rnn (will be applied in reverse order of input sequence)
 local bwd = nn.Sequential()
    :add(sharedLookupTable:sharedClone())
-   :add(nn.FastLSTM(hiddenSize, hiddenSize):maskZero(1))
+   :add(nn.RecLSTM(hiddenSize, hiddenSize):maskZero(1))
 bwdSeq = nn.Sequencer(bwd)
 
 -- merges the output of one time-step of fwd and bwd rnns.
 -- You could also try nn.AddTable(), nn.Identity(), etc.
-local merge = nn.JoinTable(1, 1) 
+local merge = nn.JoinTable(1, 1)
 mergeSeq = nn.Sequencer(merge)
 
 -- Assume that two input sequences are given (original and reverse, both are right-padded).
@@ -43,7 +43,7 @@ local brnn = nn.Sequential()
    :add(mergeSeq)
 
 local rnn = nn.Sequential()
-   :add(brnn) 
+   :add(brnn)
    :add(nn.Sequencer(nn.MaskZero(nn.Linear(hiddenSize*2, nIndex), 1))) -- times two due to JoinTable
    :add(nn.Sequencer(nn.MaskZero(nn.LogSoftMax(), 1)))
 
@@ -63,16 +63,16 @@ maxStep = {}
 for i=1,batchSize do
    table.insert(offsets, math.ceil(math.random()*sequence:size(1)))
    -- variable length for each sample
-   table.insert(maxStep, math.random(rho))
+   table.insert(maxStep, math.random(seqlen))
 end
 offsets = torch.LongTensor(offsets)
 
 -- training
 for iteration = 1, maxIter do
-   -- 1. create a sequence of rho time-steps
-   
+   -- 1. create a sequence of seqlen time-steps
+
    local inputs, inputs_rev, targets = {}, {}, {}
-   for step=1,rho do
+   for step=1,seqlen do
       -- a batch of inputs
       inputs[step] = sequence:index(1, offsets)
       -- increment indices
@@ -93,7 +93,7 @@ for iteration = 1, maxIter do
    end
 
    -- reverse
-   for step=1,rho do
+   for step=1,seqlen do
       inputs_rev[step] = torch.LongTensor(batchSize)
       for j=1,batchSize do
          if step <= maxStep[j] then
@@ -103,17 +103,17 @@ for iteration = 1, maxIter do
          end
       end
    end
-   
+
    -- 2. forward sequence through rnn
-   
-   rnn:zeroGradParameters() 
+
+   rnn:zeroGradParameters()
 
    local outputs = rnn:forward({inputs, inputs_rev})
    local err = criterion:forward(outputs, targets)
-   
+
    local correct = 0
    local total = 0
-   for step=1,rho do
+   for step=1,seqlen do
       probs = outputs[step]
       _, preds = probs:max(2)
       for j=1,batchSize do
@@ -132,12 +132,12 @@ for iteration = 1, maxIter do
    print(string.format("Iteration %d ; NLL err = %f ; ACC = %.2f ", iteration, err, acc))
 
    -- 3. backward sequence through rnn (i.e. backprop through time)
-   
+
    local gradOutputs = criterion:backward(outputs, targets)
    local gradInputs = rnn:backward({inputs, inputs_rev}, gradOutputs)
-   
+
    -- 4. update
-   
+
    rnn:updateParameters(lr)
-   
+
 end
