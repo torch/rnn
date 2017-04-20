@@ -56,6 +56,58 @@ SET(luasrc
   utils.lua
   LinearRNN.lua
   LookupRNN.lua
+  ArgMax.lua
+  BatchNormalization.lua
+  BinaryClassReward.lua
+  BinaryLogisticRegression.lua
+  CAddTensorTable.lua
+  CategoricalEntropy.lua
+  Clip.lua
+  Collapse.lua
+  Constant.lua
+  Container.lua
+  Convert.lua
+  Criterion.lua
+  Decorator.lua
+  Dictionary.lua
+  DontCast.lua
+  FireModule.lua
+  Inception.lua
+  Kmeans.lua
+  LookupTable.lua
+  ModuleCriterion.lua
+  NCECriterion.lua
+  NCEModule.lua
+  NaN.lua
+  OneHot.lua
+  PCAColorTransform.lua
+  ParallelTable.lua
+  PrintSize.lua
+  Profile.lua
+  Reinforce.lua
+  ReinforceBernoulli.lua
+  ReinforceCategorical.lua
+  ReinforceGamma.lua
+  ReinforceNormal.lua
+  ReverseTable.lua
+  Sequential.lua
+  Serial.lua
+  SimpleColorTransform.lua
+  SpatialBatchNormalization.lua
+  SpatialBinaryConvolution.lua
+  SpatialBinaryLogisticRegression.lua
+  SpatialConvolution.lua
+  SpatialConvolutionMM.lua
+  SpatialFeatNormalization.lua
+  SpatialGlimpse.lua
+  SpatialMaxPooling.lua
+  SpatialRegionDropout.lua
+  SpatialUniformCrop.lua
+  TotalDropout.lua
+  VRClassReward.lua
+  WhiteNoise.lua
+  ZipTable.lua
+  ZipTableOneToMany.lua
 )
 
 ADD_TORCH_PACKAGE(rnn "${src}" "${luasrc}" "An RNN library for Torch")

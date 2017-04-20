@@ -18,7 +18,6 @@ A library to build RNNs, LSTMs, GRUs, BRNNs, BLSTMs, and so forth and so on.
 dependencies = {
    "torch >= 7.0",
    "nn >= 1.0",
-   "dpnn >= 1.0",
    "torchx >= 1.0"
 }
 
