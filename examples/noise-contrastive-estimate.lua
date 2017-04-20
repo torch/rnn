@@ -221,7 +221,6 @@ while opt.maxepoch <= 0 or epoch <= opt.maxepoch do
       sumErr = sumErr + err
       -- backward
       local gradOutputs = criterion:backward(outputs, targets)
-      local a = torch.Timer()
       lm:zeroGradParameters()
       lm:backward(inputs, gradOutputs)
 

@@ -1,22 +1,15 @@
 require 'rnn'
 
--- hyper-parameters 
+-- hyper-parameters
 batchSize = 8
-rho = 5 -- sequence length
+seqlen = 5 -- sequence length
 hiddenSize = 7
 nIndex = 10
 lr = 0.1
 
 
--- build simple recurrent neural network
-local r = nn.Recurrent(
-   hiddenSize, nn.LookupTable(nIndex, hiddenSize), 
-   nn.Linear(hiddenSize, hiddenSize), nn.Sigmoid(), 
-   rho
-)
-
 local rnn = nn.Sequential()
-   :add(r)
+   :add(nn.LookupRNN(nIndex, hiddenSize))
    :add(nn.Linear(hiddenSize, nIndex))
    :add(nn.LogSoftMax())
 
@@ -43,10 +36,10 @@ offsets = torch.LongTensor(offsets)
 -- training
 local iteration = 1
 while true do
-   -- 1. create a sequence of rho time-steps
-   
+   -- 1. create a sequence of seqlen time-steps
+
    local inputs, targets = {}, {}
-   for step=1,rho do
+   for step=1,seqlen do
       -- a batch of inputs
       inputs[step] = sequence:index(1, offsets)
       -- incement indices
@@ -58,24 +51,24 @@ while true do
       end
       targets[step] = sequence:index(1, offsets)
    end
-   
+
    -- 2. forward sequence through rnn
-   
-   rnn:zeroGradParameters() 
-   
+
+   rnn:zeroGradParameters()
+
    local outputs = rnn:forward(inputs)
    local err = criterion:forward(outputs, targets)
-   
+
    print(string.format("Iteration %d ; NLL err = %f ", iteration, err))
 
    -- 3. backward sequence through rnn (i.e. backprop through time)
-   
+
    local gradOutputs = criterion:backward(outputs, targets)
    local gradInputs = rnn:backward(inputs, gradOutputs)
-   
+
    -- 4. update
-   
+
    rnn:updateParameters(lr)
-   
+
    iteration = iteration + 1
 end

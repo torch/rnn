@@ -1,15 +1,15 @@
 -- example use of nn.Recurrence
 require 'rnn'
 
--- hyper-parameters 
+-- hyper-parameters
 batchSize = 8
-rho = 5 -- sequence length
+seqlen = 5 -- sequence length
 hiddenSize = 7
 nIndex = 10
 lr = 0.1
 
--- the internal recurrentModule used by Recurrence
-local rm = nn.Sequential() -- input is {x[t], h[t-1]}
+-- the internal step module used by Recurrence
+local stepmodule = nn.Sequential() -- input is {x[t], h[t-1]}
    :add(nn.ParallelTable()
       :add(nn.LookupTable(nIndex, hiddenSize)) -- input layer
       :add(nn.Linear(hiddenSize, hiddenSize))) -- recurrent layer
@@ -17,7 +17,7 @@ local rm = nn.Sequential() -- input is {x[t], h[t-1]}
    :add(nn.Sigmoid()) -- transfer
 
 local rnn = nn.Sequential()
-   :add(nn.Recurrence(rm, hiddenSize, 0)) -- similar to nn.Recurrent, but more general, and no startModule
+   :add(nn.Recurrence(stepmodule, hiddenSize, 0)) -- essentially the same as nn.LookupRNN
    :add(nn.Linear(hiddenSize, nIndex))
    :add(nn.LogSoftMax())
 
@@ -45,10 +45,10 @@ offsets = torch.LongTensor(offsets)
 -- training
 local iteration = 1
 while true do
-   -- 1. create a sequence of rho time-steps
-   
+   -- 1. create a sequence of seqlen time-steps
+
    local inputs, targets = {}, {}
-   for step=1,rho do
+   for step=1,seqlen do
       -- a batch of inputs
       inputs[step] = sequence:index(1, offsets)
       -- incement indices
@@ -60,24 +60,24 @@ while true do
       end
       targets[step] = sequence:index(1, offsets)
    end
-   
+
    -- 2. forward sequence through rnn
-   
-   rnn:zeroGradParameters() 
-   
+
+   rnn:zeroGradParameters()
+
    local outputs = rnn:forward(inputs)
    local err = criterion:forward(outputs, targets)
-   
+
    print(string.format("Iteration %d ; NLL err = %f ", iteration, err))
 
    -- 3. backward sequence through rnn (i.e. backprop through time)
-   
+
    local gradOutputs = criterion:backward(outputs, targets)
    local gradInputs = rnn:backward(inputs, gradOutputs)
-   
+
    -- 4. update
-   
+
    rnn:updateParameters(lr)
-   
+
    iteration = iteration + 1
 end

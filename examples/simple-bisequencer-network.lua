@@ -1,8 +1,8 @@
 require 'rnn'
 
--- hyper-parameters 
+-- hyper-parameters
 batchSize = 8
-rho = 5 -- sequence length
+seqlen = 5 -- sequence length
 hiddenSize = 7
 nIndex = 10
 lr = 0.1
@@ -11,9 +11,9 @@ lr = 0.1
 -- forward rnn
 -- build simple recurrent neural network
 local fwd = nn.Recurrent(
-   hiddenSize, nn.LookupTable(nIndex, hiddenSize), 
-   nn.Linear(hiddenSize, hiddenSize), nn.Sigmoid(), 
-   rho
+   hiddenSize, nn.LookupTable(nIndex, hiddenSize),
+   nn.Linear(hiddenSize, hiddenSize), nn.Sigmoid(),
+   seqlen
 )
 
 -- backward rnn (will be applied in reverse order of input sequence)
@@ -22,7 +22,7 @@ bwd:reset() -- reinitializes parameters
 
 -- merges the output of one time-step of fwd and bwd rnns.
 -- You could also try nn.AddTable(), nn.Identity(), etc.
-local merge = nn.JoinTable(1, 1) 
+local merge = nn.JoinTable(1, 1)
 
 -- we use BiSequencerLM because this is a language model (previous and next words to predict current word).
 -- If we used BiSequencer, x[t] would be used to predict y[t] = x[t] (which is cheating).
@@ -30,7 +30,7 @@ local merge = nn.JoinTable(1, 1)
 local brnn = nn.BiSequencerLM(fwd, bwd, merge)
 
 local rnn = nn.Sequential()
-   :add(brnn) 
+   :add(brnn)
    :add(nn.Sequencer(nn.Linear(hiddenSize*2, nIndex))) -- times two due to JoinTable
    :add(nn.Sequencer(nn.LogSoftMax()))
 
@@ -54,10 +54,10 @@ offsets = torch.LongTensor(offsets)
 -- training
 local iteration = 1
 while true do
-   -- 1. create a sequence of rho time-steps
-   
+   -- 1. create a sequence of seqlen time-steps
+
    local inputs, targets = {}, {}
-   for step=1,rho do
+   for step=1,seqlen do
       -- a batch of inputs
       inputs[step] = sequence:index(1, offsets)
       -- incement indices
@@ -69,24 +69,24 @@ while true do
       end
       targets[step] = sequence:index(1, offsets)
    end
-   
+
    -- 2. forward sequence through rnn
-   
-   rnn:zeroGradParameters() 
-   
+
+   rnn:zeroGradParameters()
+
    local outputs = rnn:forward(inputs)
    local err = criterion:forward(outputs, targets)
-   
+
    print(string.format("Iteration %d ; NLL err = %f ", iteration, err))
 
    -- 3. backward sequence through rnn (i.e. backprop through time)
-   
+
    local gradOutputs = criterion:backward(outputs, targets)
    local gradInputs = rnn:backward(inputs, gradOutputs)
-   
+
    -- 4. update
-   
+
    rnn:updateParameters(lr)
-   
+
    iteration = iteration + 1
 end

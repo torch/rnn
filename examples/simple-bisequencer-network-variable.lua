@@ -6,7 +6,7 @@ math.randomseed(0)
 
 -- hyper-parameters
 batchSize = 8
-rho = 10 -- sequence length
+seqlen = 10 -- sequence length
 hiddenSize = 5
 nIndex = 10
 lr = 0.1
@@ -63,16 +63,16 @@ maxStep = {}
 for i=1,batchSize do
    table.insert(offsets, math.ceil(math.random()*sequence:size(1)))
    -- variable length for each sample
-   table.insert(maxStep, math.random(rho))
+   table.insert(maxStep, math.random(seqlen))
 end
 offsets = torch.LongTensor(offsets)
 
 -- training
 for iteration = 1, maxIter do
-   -- 1. create a sequence of rho time-steps
+   -- 1. create a sequence of seqlen time-steps
 
    local inputs, inputs_rev, targets = {}, {}, {}
-   for step=1,rho do
+   for step=1,seqlen do
       -- a batch of inputs
       inputs[step] = sequence:index(1, offsets)
       -- increment indices
@@ -93,7 +93,7 @@ for iteration = 1, maxIter do
    end
 
    -- reverse
-   for step=1,rho do
+   for step=1,seqlen do
       inputs_rev[step] = torch.LongTensor(batchSize)
       for j=1,batchSize do
          if step <= maxStep[j] then
@@ -113,7 +113,7 @@ for iteration = 1, maxIter do
 
    local correct = 0
    local total = 0
-   for step=1,rho do
+   for step=1,seqlen do
       probs = outputs[step]
       _, preds = probs:max(2)
       for j=1,batchSize do
