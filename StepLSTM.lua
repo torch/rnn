@@ -207,5 +207,3 @@ function StepLSTM:type(type, ...)
    self:clearState()
    return parent.type(self, type, ...)
 end
-
-StepLSTM.toFastLSTM = nn.SeqLSTM.toFastLSTM

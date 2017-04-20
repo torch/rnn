@@ -1,11 +1,22 @@
-require 'dpnn'
 require 'torchx'
-dpnn.version = dpnn.version or 0
-assert(dpnn.version > 1, "Please update dpnn : luarocks install dpnn")
+local _ = require 'moses'
+require 'nn'
 
 -- create global rnn table:
 rnn = {}
-rnn.version = 2.3 -- deprecated Recurrent and FastLSTM
+rnn.version = 2.4 -- merge dpnn
+
+-- lua 5.2 compat
+
+function nn.require(packagename)
+   assert(torch.type(packagename) == 'string')
+   local success, message = pcall(function() require(packagename) end)
+   if not success then
+      print("missing package "..packagename..": run 'luarocks install nnx'")
+      error(message)
+   end
+end
+
 
 -- c lib:
 require "paths"
@@ -13,67 +24,132 @@ paths.require 'librnn'
 
 unpack = unpack or table.unpack
 
-torch.include('rnn', 'recursiveUtils.lua')
-torch.include('rnn', 'utils.lua')
+require('rnn.recursiveUtils')
+require('rnn.utils')
 
--- extensions to nn.Module
-torch.include('rnn', 'Module.lua')
+-- extensions to existing nn.Module
+require('rnn.Module')
+require('rnn.Container')
+require('rnn.Sequential')
+require('rnn.ParallelTable')
+require('rnn.LookupTable')
+require('rnn.Dropout')
 
--- override nn.Dropout
-torch.include('rnn', 'Dropout.lua')
+-- extensions to existing criterions
+require('rnn.Criterion')
+
+-- decorator modules
+require('rnn.Decorator')
+require('rnn.Serial')
+require('rnn.DontCast')
+require('rnn.NaN')
+require('rnn.Profile')
+
+-- extensions to make serialization more efficient
+require('rnn.SpatialMaxPooling')
+require('rnn.SpatialConvolution')
+require('rnn.SpatialConvolutionMM')
+require('rnn.SpatialBatchNormalization')
+require('rnn.BatchNormalization')
+
+
+-- modules
+require('rnn.PrintSize')
+require('rnn.Convert')
+require('rnn.Constant')
+require('rnn.Collapse')
+require('rnn.ZipTable')
+require('rnn.ZipTableOneToMany')
+require('rnn.CAddTensorTable')
+require('rnn.ReverseTable')
+require('rnn.Dictionary')
+require('rnn.Inception')
+require('rnn.Clip')
+require('rnn.SpatialUniformCrop')
+require('rnn.SpatialGlimpse')
+require('rnn.WhiteNoise')
+require('rnn.ArgMax')
+require('rnn.CategoricalEntropy')
+require('rnn.TotalDropout')
+require('rnn.Kmeans')
+require('rnn.OneHot')
+require('rnn.SpatialRegionDropout')
+require('rnn.FireModule')
+require('rnn.SpatialFeatNormalization')
+require('rnn.ZeroGrad')
+require('rnn.LinearNoBias')
+require('rnn.SAdd')
+require('rnn.CopyGrad')
+require('rnn.VariableLength')
+require('rnn.StepLSTM')
+require('rnn.LookupTableMaskZero')
+require('rnn.MaskZero')
+require('rnn.TrimZero')
+require('rnn.SpatialBinaryConvolution')
+require('rnn.SimpleColorTransform')
+require('rnn.PCAColorTransform')
+
+-- Noise Contrastive Estimation
+require('rnn.NCEModule')
+require('rnn.NCECriterion')
+
+-- REINFORCE
+require('rnn.Reinforce')
+require('rnn.ReinforceGamma')
+require('rnn.ReinforceBernoulli')
+require('rnn.ReinforceNormal')
+require('rnn.ReinforceCategorical')
+
+-- REINFORCE criterions
+require('rnn.VRClassReward')
+require('rnn.BinaryClassReward')
+
+-- criterions
+require('rnn.ModuleCriterion')
+require('rnn.BinaryLogisticRegression')
+require('rnn.SpatialBinaryLogisticRegression')
 
 -- for testing:
-torch.include('rnn', 'test.lua')
-torch.include('rnn', 'bigtest.lua')
-
--- support modules
-torch.include('rnn', 'ZeroGrad.lua')
-torch.include('rnn', 'LinearNoBias.lua')
-torch.include('rnn', 'SAdd.lua')
-torch.include('rnn', 'CopyGrad.lua')
-torch.include('rnn', 'VariableLength.lua')
+require('rnn.test')
+require('rnn.bigtest')
 
 -- recurrent modules
-torch.include('rnn', 'AbstractRecurrent.lua')
-torch.include('rnn', 'Recursor.lua')
-torch.include('rnn', 'Recurrence.lua')
-torch.include('rnn', 'LinearRNN.lua')
-torch.include('rnn', 'LookupRNN.lua')
-torch.include('rnn', 'LSTM.lua')
-torch.include('rnn', 'RecLSTM.lua')
-torch.include('rnn', 'GRU.lua')
-torch.include('rnn', 'Mufuru.lua')
-torch.include('rnn', 'NormStabilizer.lua')
+require('rnn.AbstractRecurrent')
+require('rnn.Recursor')
+require('rnn.Recurrence')
+require('rnn.LinearRNN')
+require('rnn.LookupRNN')
+require('rnn.LSTM')
+require('rnn.RecLSTM')
+require('rnn.GRU')
+require('rnn.Mufuru')
+require('rnn.NormStabilizer')
 
 -- sequencer modules
-torch.include('rnn', 'AbstractSequencer.lua')
-torch.include('rnn', 'Repeater.lua')
-torch.include('rnn', 'Sequencer.lua')
-torch.include('rnn', 'BiSequencer.lua')
-torch.include('rnn', 'BiSequencerLM.lua')
-torch.include('rnn', 'RecurrentAttention.lua')
+require('rnn.AbstractSequencer')
+require('rnn.Repeater')
+require('rnn.Sequencer')
+require('rnn.BiSequencer')
+require('rnn.BiSequencerLM')
+require('rnn.RecurrentAttention')
 
 -- sequencer + recurrent modules
-torch.include('rnn', 'SeqLSTM.lua')
-torch.include('rnn', 'SeqLSTMP.lua')
-torch.include('rnn', 'SeqGRU.lua')
-torch.include('rnn', 'SeqReverseSequence.lua')
-torch.include('rnn', 'SeqBRNN.lua')
-
--- step modules
-torch.include('rnn', 'StepLSTM.lua')
-torch.include('rnn', 'LookupTableMaskZero.lua')
-torch.include('rnn', 'MaskZero.lua')
-torch.include('rnn', 'TrimZero.lua')
+require('rnn.SeqLSTM')
+require('rnn.SeqLSTMP')
+require('rnn.SeqGRU')
+require('rnn.SeqReverseSequence')
+require('rnn.SeqBRNN')
 
 -- recurrent criterions:
-torch.include('rnn', 'SequencerCriterion.lua')
-torch.include('rnn', 'RepeaterCriterion.lua')
-torch.include('rnn', 'MaskZeroCriterion.lua')
+require('rnn.SequencerCriterion')
+require('rnn.RepeaterCriterion')
+require('rnn.MaskZeroCriterion')
 
 -- deprecated modules
-torch.include('rnn', 'FastLSTM.lua')
-torch.include('rnn', 'Recurrent.lua')
+require('rnn.FastLSTM')
+require('rnn.Recurrent')
 
 -- prevent likely name conflicts
 nn.rnn = rnn
+
+return rnn
