@@ -3,36 +3,33 @@
 #else
 
 static int nn_(StepLSTM_updateOutput)(lua_State *L) {
-  THTensor *cur_x = luaT_checkudata(L, 2, torch_Tensor);
-  THTensor *prev_h = luaT_checkudata(L, 3, torch_Tensor);
-  THTensor *prev_c = luaT_checkudata(L, 4, torch_Tensor);
-  THTensor *next_h = luaT_checkudata(L, 5, torch_Tensor);
-  THTensor *next_c = luaT_checkudata(L, 6, torch_Tensor);
+  THTensor *weight = luaT_checkudata(L, 1, torch_Tensor);
+  THTensor *bias = luaT_checkudata(L, 2, torch_Tensor);
+  THTensor *gates = luaT_checkudata(L, 3, torch_Tensor);
+  THTensor *cur_x = luaT_checkudata(L, 4, torch_Tensor);
+  THTensor *prev_h = luaT_checkudata(L, 5, torch_Tensor);
+  THTensor *prev_c = luaT_checkudata(L, 6, torch_Tensor);
+  THTensor *next_h = luaT_checkudata(L, 7, torch_Tensor);
+  THTensor *next_c = luaT_checkudata(L, 8, torch_Tensor);
 
   int batchsize = THTensor_(size)(cur_x, 0);
-  int inputsize = luaT_getfieldcheckint(L, 1, "inputsize");
-  int outputsize = luaT_getfieldcheckint(L, 1, "outputsize");
+  // weight has size: (inputsize+outputsize, 4 * outputsize)
+  int outputsize = THTensor_(size)(weight, 1)/4;
+  int inputsize = THTensor_(size)(weight, 0)-outputsize;
   if (THTensor_(size)(cur_x, 1) != inputsize)
     return LUA_HANDLE_ERROR_STR(L, "expected input[1]:size(2) == inputsize");
 
-  THTensor *weight = luaT_getfieldcheckudata(L, 1, "weight", torch_Tensor);
-  THTensor *bias = luaT_getfieldcheckudata(L, 1, "bias", torch_Tensor);
-  THTensor *buffer = luaT_getfieldcheckudata(L, 1, "buffer", torch_Tensor);
-  THTensor *Wx = luaT_getfieldcheckudata(L, 1, "Wx", torch_Tensor);
-  THTensor *Wh = luaT_getfieldcheckudata(L, 1, "Wh", torch_Tensor);
-
-  THTensor_(set)(buffer, bias);
+  THTensor *buffer = THTensor_(newWithTensor)(bias);
   THTensor_(resize2d)(buffer, 1, 4 * outputsize);
   buffer->stride[0] = 0;
   buffer->size[0] = batchsize;
 
-  THTensor_(narrow)(Wx, weight, 0, 0, inputsize);
-  THTensor_(narrow)(Wh, weight, 0, inputsize, outputsize);
+  THTensor *Wx = THTensor_(newNarrow)(weight, 0, 0, inputsize);
+  THTensor *Wh = THTensor_(newNarrow)(weight, 0, inputsize, outputsize);
 
   THTensor_(resize2d)(next_h, batchsize, outputsize);
   THTensor_(resize2d)(next_c, batchsize, outputsize);
 
-  THTensor *gates = luaT_getfieldcheckudata(L, 1, "gates", torch_Tensor);
   THTensor_(resize2d)(gates, batchsize, 4 * outputsize);
   THTensor_(fill)(gates, 0);
 
@@ -46,15 +43,10 @@ static int nn_(StepLSTM_updateOutput)(lua_State *L) {
   THTensor_(narrow)(buffer, gates, 1, 3 * outputsize, outputsize);
   THTensor_(tanh)(buffer, buffer);
 
-  THTensor *input_gate = luaT_getfieldcheckudata(L, 1, "input_gate", torch_Tensor);
-  THTensor *forget_gate = luaT_getfieldcheckudata(L, 1, "forget_gate", torch_Tensor);
-  THTensor *output_gate = luaT_getfieldcheckudata(L, 1, "output_gate", torch_Tensor);
-  THTensor *input_transform = luaT_getfieldcheckudata(L, 1, "input_transform", torch_Tensor);
-
-  THTensor_(narrow)(input_gate, gates, 1, 0, outputsize);
-  THTensor_(narrow)(forget_gate, gates, 1, outputsize, outputsize);
-  THTensor_(narrow)(output_gate, gates, 1, 2*outputsize, outputsize);
-  THTensor_(narrow)(input_transform, gates, 1, 3*outputsize, outputsize);
+  THTensor *input_gate = THTensor_(newNarrow)(gates, 1, 0, outputsize);
+  THTensor *forget_gate = THTensor_(newNarrow)(gates, 1, outputsize, outputsize);
+  THTensor *output_gate = THTensor_(newNarrow)(gates, 1, 2*outputsize, outputsize);
+  THTensor *input_transform = THTensor_(newNarrow)(gates, 1, 3*outputsize, outputsize);
 
   THTensor_(cmul)(next_h, input_gate, input_transform);
   THTensor_(cmul)(next_c, forget_gate, prev_c);
@@ -62,26 +54,39 @@ static int nn_(StepLSTM_updateOutput)(lua_State *L) {
   THTensor_(tanh)(next_h, next_c);
   THTensor_(cmul)(next_h, next_h, output_gate);
 
+  THTensor_(free)(Wx);
+  THTensor_(free)(Wh);
+  THTensor_(free)(buffer);
+  THTensor_(free)(input_gate);
+  THTensor_(free)(forget_gate);
+  THTensor_(free)(output_gate);
+  THTensor_(free)(input_transform);
+
   return 2;
 }
 
 static int nn_(StepLSTM_backward)(lua_State *L) {
-  THTensor *cur_x = luaT_checkudata(L, 2, torch_Tensor);
-  THTensor *prev_h = luaT_checkudata(L, 3, torch_Tensor);
-  THTensor *prev_c = luaT_checkudata(L, 4, torch_Tensor);
-  THTensor *next_c = luaT_checkudata(L, 5, torch_Tensor);
-  THTensor *grad_next_h = luaT_checkudata(L, 6, torch_Tensor);
-  THTensor *grad_next_c = luaT_checkudata(L, 7, torch_Tensor);
-  lua_Number scale = luaL_checknumber(L, 8);
-  THTensor *grad_gates = luaT_checkudata(L, 9, torch_Tensor);
-  THTensor *grad_gates_sum = luaT_checkudata(L, 10, torch_Tensor);
-  THTensor *grad_cur_x = luaT_checkudata(L, 11, torch_Tensor);
-  THTensor *grad_prev_h = luaT_checkudata(L, 12, torch_Tensor);
-  THTensor *grad_prev_c = luaT_checkudata(L, 13, torch_Tensor);
+  THTensor *weight = luaT_checkudata(L, 1, torch_Tensor);
+  THTensor *gates = luaT_checkudata(L, 2, torch_Tensor);
+  THTensor *gradWeight = luaT_checkudata(L, 3, torch_Tensor);
+  THTensor *grad_b = luaT_checkudata(L, 4, torch_Tensor);
+  THTensor *grad_gates = luaT_checkudata(L, 5, torch_Tensor);
+  THTensor *grad_gates_sum = luaT_checkudata(L, 6, torch_Tensor);
+  THTensor *cur_x = luaT_checkudata(L, 7, torch_Tensor);
+  THTensor *prev_h = luaT_checkudata(L, 8, torch_Tensor);
+  THTensor *prev_c = luaT_checkudata(L, 9, torch_Tensor);
+  THTensor *next_c = luaT_checkudata(L, 10, torch_Tensor);
+  THTensor *grad_next_h = luaT_checkudata(L, 11, torch_Tensor);
+  THTensor *grad_next_c = luaT_checkudata(L, 12, torch_Tensor);
+  lua_Number scale = luaL_checknumber(L, 13);
+  THTensor *grad_cur_x = luaT_checkudata(L, 14, torch_Tensor);
+  THTensor *grad_prev_h = luaT_checkudata(L, 15, torch_Tensor);
+  THTensor *grad_prev_c = luaT_checkudata(L, 16, torch_Tensor);
 
   int batchsize = THTensor_(size)(cur_x, 0);
-  int inputsize = luaT_getfieldcheckint(L, 1, "inputsize");
-  int outputsize = luaT_getfieldcheckint(L, 1, "outputsize");
+  // weight has size: (inputsize+outputsize, 4 * outputsize)
+  int outputsize = THTensor_(size)(weight, 1)/4;
+  int inputsize = THTensor_(size)(weight, 0)-outputsize;
   if (THTensor_(size)(cur_x, 1) != inputsize)
     return LUA_HANDLE_ERROR_STR(L, "expected input[1]:size(2) == inputsize");
   if (THTensor_(size)(grad_next_h, 1) != outputsize)
@@ -92,33 +97,26 @@ static int nn_(StepLSTM_backward)(lua_State *L) {
   THTensor_(resize2d)(grad_prev_c, batchsize, outputsize);
 
   // these tensors were set-up in updateOutput
-  THTensor *Wx = luaT_getfieldcheckudata(L, 1, "Wx", torch_Tensor);
-  THTensor *Wh = luaT_getfieldcheckudata(L, 1, "Wh", torch_Tensor);
-  THTensor *input_gate = luaT_getfieldcheckudata(L, 1, "input_gate", torch_Tensor);
-  THTensor *forget_gate = luaT_getfieldcheckudata(L, 1, "forget_gate", torch_Tensor);
-  THTensor *output_gate = luaT_getfieldcheckudata(L, 1, "output_gate", torch_Tensor);
-  THTensor *input_transform = luaT_getfieldcheckudata(L, 1, "input_transform", torch_Tensor);
+  THTensor *Wx = THTensor_(newNarrow)(weight, 0, 0, inputsize);
+  THTensor *Wh = THTensor_(newNarrow)(weight, 0, inputsize, outputsize);
+
+  THTensor *input_gate = THTensor_(newNarrow)(gates, 1, 0, outputsize);
+  THTensor *forget_gate = THTensor_(newNarrow)(gates, 1, outputsize, outputsize);
+  THTensor *output_gate = THTensor_(newNarrow)(gates, 1, 2*outputsize, outputsize);
+  THTensor *input_transform = THTensor_(newNarrow)(gates, 1, 3*outputsize, outputsize);
 
   // set-up grad tensors
-  THTensor *gradWeight = luaT_getfieldcheckudata(L, 1, "gradWeight", torch_Tensor);
-  THTensor *grad_b = luaT_getfieldcheckudata(L, 1, "gradBias", torch_Tensor);
-  THTensor *grad_Wx = luaT_getfieldcheckudata(L, 1, "grad_Wx", torch_Tensor);
-  THTensor *grad_Wh = luaT_getfieldcheckudata(L, 1, "grad_Wh", torch_Tensor);
-  THTensor_(narrow)(grad_Wx, gradWeight, 0, 0, inputsize);
-  THTensor_(narrow)(grad_Wh, gradWeight, 0, inputsize, outputsize);
+
+  THTensor *grad_Wx = THTensor_(newNarrow)(gradWeight, 0, 0, inputsize);
+  THTensor *grad_Wh = THTensor_(newNarrow)(gradWeight, 0, inputsize, outputsize);
 
   THTensor_(resize2d)(grad_gates, batchsize, 4 * outputsize);
   THTensor_(fill)(grad_gates, 0);
 
-  THTensor *grad_input_gate = luaT_getfieldcheckudata(L, 1, "grad_input_gate", torch_Tensor);
-  THTensor *grad_forget_gate = luaT_getfieldcheckudata(L, 1, "grad_forget_gate", torch_Tensor);
-  THTensor *grad_output_gate = luaT_getfieldcheckudata(L, 1, "grad_output_gate", torch_Tensor);
-  THTensor *grad_input_transform = luaT_getfieldcheckudata(L, 1, "grad_input_transform", torch_Tensor);
-
-  THTensor_(narrow)(grad_input_gate, grad_gates, 1, 0, outputsize);
-  THTensor_(narrow)(grad_forget_gate, grad_gates, 1, outputsize, outputsize);
-  THTensor_(narrow)(grad_output_gate, grad_gates, 1, 2*outputsize, outputsize);
-  THTensor_(narrow)(grad_input_transform, grad_gates, 1, 3*outputsize, outputsize);
+  THTensor *grad_input_gate = THTensor_(newNarrow)(grad_gates, 1, 0, outputsize);
+  THTensor *grad_forget_gate = THTensor_(newNarrow)(grad_gates, 1, outputsize, outputsize);
+  THTensor *grad_output_gate = THTensor_(newNarrow)(grad_gates, 1, 2*outputsize, outputsize);
+  THTensor *grad_input_transform = THTensor_(newNarrow)(grad_gates, 1, 3*outputsize, outputsize);
 
   // backward
 
@@ -174,6 +172,20 @@ static int nn_(StepLSTM_backward)(lua_State *L) {
 
   THTensor_(addmm)(grad_prev_h, 0, grad_prev_h, 1, grad_gates, Wh_t);
   THTensor_(cmul)(grad_prev_c, grad_prev_c, forget_gate);
+
+  THTensor_(free)(Wx);
+  THTensor_(free)(Wh);
+  THTensor_(free)(input_gate);
+  THTensor_(free)(forget_gate);
+  THTensor_(free)(output_gate);
+  THTensor_(free)(input_transform);
+
+  THTensor_(free)(grad_Wx);
+  THTensor_(free)(grad_Wh);
+  THTensor_(free)(grad_input_gate);
+  THTensor_(free)(grad_forget_gate);
+  THTensor_(free)(grad_output_gate);
+  THTensor_(free)(grad_input_transform);
 
   THTensor_(free)(Wx_t);
   THTensor_(free)(Wh_t);

@@ -19,21 +19,6 @@ function StepLSTM:__init(inputsize, outputsize)
 
    self.gates = torch.Tensor() -- batchsize x 4*outputsize
 
-   self.buffer = torch.Tensor()
-   self.input_gate = torch.Tensor()
-   self.forget_gate = torch.Tensor()
-   self.output_gate = torch.Tensor()
-   self.input_transform = torch.Tensor()
-   self.Wx = torch.Tensor()
-   self.Wh = torch.Tensor()
-
-   self.grad_input_gate = torch.Tensor()
-   self.grad_forget_gate = torch.Tensor()
-   self.grad_output_gate = torch.Tensor()
-   self.grad_input_transform = torch.Tensor()
-   self.grad_Wx = torch.Tensor()
-   self.grad_Wh = torch.Tensor()
-
    self.output = {torch.Tensor(), torch.Tensor()}
    self.gradInput = {torch.Tensor(), torch.Tensor(), torch.Tensor()}
 
@@ -78,7 +63,7 @@ function StepLSTM:updateOutput(input)
    local cur_x, prev_h, prev_c = input[1], input[2], input[3]
    local next_h, next_c = self.output[1], self.output[2]
    if cur_x.nn.StepLSTM_updateOutput and not self.forceLua then
-      cur_x.nn.StepLSTM_updateOutput(self, cur_x, prev_h, prev_c, next_h, next_c)
+      cur_x.nn.StepLSTM_updateOutput(self.weight, self.bias, self.gates, cur_x, prev_h, prev_c, next_h, next_c)
    else
       assert(torch.isTensor(prev_h))
       assert(torch.isTensor(prev_c))
@@ -141,7 +126,8 @@ function StepLSTM:backward(input, gradOutput, scale)
    end
 
    if cur_x.nn.StepLSTM_backward and not self.forceLua then
-      cur_x.nn.StepLSTM_backward(self, cur_x, prev_h, prev_c, next_c, grad_next_h, grad_next_c, scale, grad_gates, grad_gates_sum, grad_cur_x, grad_prev_h, grad_prev_c)
+      cur_x.nn.StepLSTM_backward(self.weight, self.gates, self.gradWeight, self.gradBias, grad_gates, grad_gates_sum,
+                                 cur_x, prev_h, prev_c, next_c, grad_next_h, grad_next_c, scale, grad_cur_x, grad_prev_h, grad_prev_c)
    else
       local batchsize, inputsize, outputsize = cur_x:size(1), cur_x:size(2), self.outputsize
       assert(inputsize == self.inputsize)
@@ -220,21 +206,6 @@ function StepLSTM:clearState()
 
    self.output[1]:set(); self.output[2]:set()
    self.gradInput[1]:set(); self.gradInput[2]:set(); self.gradInput[3]:set()
-
-   self.buffer:set()
-   self.input_gate:set()
-   self.forget_gate:set()
-   self.output_gate:set()
-   self.input_transform:set()
-   self.Wx:set()
-   self.Wh:set()
-
-   self.grad_input_gate:set()
-   self.grad_forget_gate:set()
-   self.grad_output_gate:set()
-   self.grad_input_transform:set()
-   self.grad_Wx:set()
-   self.grad_Wh:set()
 
    self.zeroMask = nil
    self._zeroMask = nil
