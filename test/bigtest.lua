@@ -469,8 +469,8 @@ end
 
 function rnnbigtest.LSTM()
    local seqlen, batchsize = 30, 32
-   local inputsize, outputsize = 512, 512
-   local nloop = 10
+   local inputsize, outputsize = 128, 128
+   local nloop = 20
 
    local lstms = {}
    lstms.fast = nn.Sequencer(nn.FastLSTM(inputsize, outputsize))
@@ -482,24 +482,25 @@ function rnnbigtest.LSTM()
       :add(nn.SelectTable(1))
    lstms.step = nn.Sequencer(recmodule)
    lstms.rec = nn.Sequencer(nn.RecLSTM(inputsize, outputsize))
+   local luarec = nn.RecLSTM(inputsize, outputsize)
+   luarec.modules[1].forceLua = true
+   lstms.luarec = nn.Sequencer(luarec)
    lstms.seq = nn.SeqLSTM(inputsize, outputsize)
 
    local input = torch.Tensor(seqlen, batchsize, inputsize)
    local gradOutput = torch.Tensor(seqlen, batchsize, outputsize)
-
-   -- warmup
-   for name, lstm in pairs(lstms) do
-      lstm:remember('neither')
-      lstm:forward(input)
-      lstm:zeroGradParameters()
-      lstm:backward(input, gradOutput)
-   end
 
    local t = torch.Timer()
 
    print("CPU test")
 
    for name, lstm in pairs(lstms) do
+       -- warmup
+      lstm:remember('neither')
+      lstm:forward(input)
+      lstm:zeroGradParameters()
+      lstm:backward(input, gradOutput)
+      -- main test
       t:reset()
       for i=1,nloop do
          lstm:forward(input)
@@ -509,10 +510,11 @@ function rnnbigtest.LSTM()
       lstm.testtime = t:time().real/10
    end
 
-   for i,name in ipairs{'fast','step','rec','seq'} do
+   for i,name in ipairs{'fast','step','luarec','rec','seq'} do
       print(name..' LSTM time: '..lstms[name].testtime..' seconds')
    end
 
+   print("RecLSTM-C "..(lstms.luarec.testtime/lstms.rec.testtime)..' faster than RecLSTM-Lua')
    print("RecLSTM "..(lstms.fast.testtime/lstms.rec.testtime)..' faster than FastLSTM')
    print("SeqLSTM "..(lstms.rec.testtime/lstms.seq.testtime)..' faster than RecLSTM')
 
