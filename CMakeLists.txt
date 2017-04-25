@@ -42,7 +42,7 @@ SET(luasrc
   SeqBRNN.lua
   SeqGRU.lua
   SeqLSTM.lua
-  SeqLSTMP.lua
+  deprecated/SeqLSTMP.lua
   SeqReverseSequence.lua
   Sequencer.lua
   SequencerCriterion.lua

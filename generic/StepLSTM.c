@@ -9,44 +9,44 @@ static int nn_(StepLSTM_updateOutput)(lua_State *L) {
   THTensor *cur_x = luaT_checkudata(L, 4, torch_Tensor);
   THTensor *prev_h = luaT_checkudata(L, 5, torch_Tensor);
   THTensor *prev_c = luaT_checkudata(L, 6, torch_Tensor);
-  THTensor *next_h = luaT_checkudata(L, 7, torch_Tensor);
-  THTensor *next_c = luaT_checkudata(L, 8, torch_Tensor);
+  int inputsize = luaL_checkinteger(L, 7);
+  int hiddensize = luaL_checkinteger(L, 8);
+  int outputsize = luaL_checkinteger(L, 9);
+  THTensor *next_h = luaT_checkudata(L, 10, torch_Tensor); // when LSTMP pass hidden[t]
+  THTensor *next_c = luaT_checkudata(L, 11, torch_Tensor);
 
   int batchsize = THTensor_(size)(cur_x, 0);
-  // weight has size: (inputsize+outputsize, 4 * outputsize)
-  int outputsize = THTensor_(size)(weight, 1)/4;
-  int inputsize = THTensor_(size)(weight, 0)-outputsize;
   if (THTensor_(size)(cur_x, 1) != inputsize)
     return LUA_HANDLE_ERROR_STR(L, "expected input[1]:size(2) == inputsize");
 
   THTensor *buffer = THTensor_(newWithTensor)(bias);
-  THTensor_(resize2d)(buffer, 1, 4 * outputsize);
+  THTensor_(resize2d)(buffer, 1, 4 * hiddensize);
   buffer->stride[0] = 0;
   buffer->size[0] = batchsize;
 
   THTensor *Wx = THTensor_(newNarrow)(weight, 0, 0, inputsize);
   THTensor *Wh = THTensor_(newNarrow)(weight, 0, inputsize, outputsize);
 
-  THTensor_(resize2d)(next_h, batchsize, outputsize);
-  THTensor_(resize2d)(next_c, batchsize, outputsize);
+  THTensor_(resize2d)(next_h, batchsize, hiddensize);
+  THTensor_(resize2d)(next_c, batchsize, hiddensize);
 
-  THTensor_(resize2d)(gates, batchsize, 4 * outputsize);
+  THTensor_(resize2d)(gates, batchsize, 4 * hiddensize);
   THTensor_(fill)(gates, 0);
 
   // forward
   THTensor_(addmm)(gates, 1, buffer, 1, cur_x, Wx);
   THTensor_(addmm)(gates, 1, gates, 1, prev_h, Wh);
 
-  THTensor_(narrow)(buffer, gates, 1, 0, 3 * outputsize);
+  THTensor_(narrow)(buffer, gates, 1, 0, 3 * hiddensize);
   THTensor_(sigmoid)(buffer, buffer);
 
-  THTensor_(narrow)(buffer, gates, 1, 3 * outputsize, outputsize);
+  THTensor_(narrow)(buffer, gates, 1, 3 * hiddensize, hiddensize);
   THTensor_(tanh)(buffer, buffer);
 
-  THTensor *input_gate = THTensor_(newNarrow)(gates, 1, 0, outputsize);
-  THTensor *forget_gate = THTensor_(newNarrow)(gates, 1, outputsize, outputsize);
-  THTensor *output_gate = THTensor_(newNarrow)(gates, 1, 2*outputsize, outputsize);
-  THTensor *input_transform = THTensor_(newNarrow)(gates, 1, 3*outputsize, outputsize);
+  THTensor *input_gate = THTensor_(newNarrow)(gates, 1, 0, hiddensize);
+  THTensor *forget_gate = THTensor_(newNarrow)(gates, 1, hiddensize, hiddensize);
+  THTensor *output_gate = THTensor_(newNarrow)(gates, 1, 2*hiddensize, hiddensize);
+  THTensor *input_transform = THTensor_(newNarrow)(gates, 1, 3*hiddensize, hiddensize);
 
   THTensor_(cmul)(next_h, input_gate, input_transform);
   THTensor_(cmul)(next_c, forget_gate, prev_c);
@@ -61,6 +61,17 @@ static int nn_(StepLSTM_updateOutput)(lua_State *L) {
   THTensor_(free)(forget_gate);
   THTensor_(free)(output_gate);
   THTensor_(free)(input_transform);
+
+  if (lua_gettop(L) > 11) // implements LSTMP (P stands for projection layer)
+  {
+    THTensor *hidden = next_h;
+    THTensor *weightO = luaT_checkudata(L, 12, torch_Tensor);
+    next_h = luaT_checkudata(L, 13, torch_Tensor);
+    THTensor_(resize2d)(next_h, batchsize, outputsize);
+    THTensor_(addmm)(next_h, 0, next_h, 1, hidden, weightO);
+    // push results onto stack
+    luaT_pushudata(L, next_c, torch_Tensor);
+  }
 
   return 2;
 }
@@ -79,51 +90,75 @@ static int nn_(StepLSTM_backward)(lua_State *L) {
   THTensor *grad_next_h = luaT_checkudata(L, 11, torch_Tensor);
   THTensor *grad_next_c = luaT_checkudata(L, 12, torch_Tensor);
   lua_Number scale = luaL_checknumber(L, 13);
-  THTensor *grad_cur_x = luaT_checkudata(L, 14, torch_Tensor);
-  THTensor *grad_prev_h = luaT_checkudata(L, 15, torch_Tensor);
-  THTensor *grad_prev_c = luaT_checkudata(L, 16, torch_Tensor);
+  int inputsize = luaL_checkinteger(L, 14);
+  int hiddensize = luaL_checkinteger(L, 15);
+  int outputsize = luaL_checkinteger(L, 16);
+  THTensor *grad_cur_x = luaT_checkudata(L, 17, torch_Tensor);
+  THTensor *grad_prev_h = luaT_checkudata(L, 18, torch_Tensor);
+  THTensor *grad_prev_c = luaT_checkudata(L, 19, torch_Tensor);
 
   int batchsize = THTensor_(size)(cur_x, 0);
-  // weight has size: (inputsize+outputsize, 4 * outputsize)
-  int outputsize = THTensor_(size)(weight, 1)/4;
-  int inputsize = THTensor_(size)(weight, 0)-outputsize;
   if (THTensor_(size)(cur_x, 1) != inputsize)
     return LUA_HANDLE_ERROR_STR(L, "expected input[1]:size(2) == inputsize");
   if (THTensor_(size)(grad_next_h, 1) != outputsize)
     return LUA_HANDLE_ERROR_STR(L, "expected gradOutput[1]:size(2) == outputsize");
 
+  if (lua_gettop(L) > 19) // LSTMP
+  {
+    THTensor *weightO = luaT_checkudata(L, 20, torch_Tensor);
+    THTensor *hidden = luaT_checkudata(L, 21, torch_Tensor);
+    THTensor *gradWeightO = luaT_checkudata(L, 22, torch_Tensor);
+    THTensor *grad_hidden = luaT_checkudata(L, 23, torch_Tensor);
+
+    THTensor *hidden_t = THTensor_(newTranspose)(hidden, 0, 1);
+    THTensor *weightO_t = THTensor_(newTranspose)(weightO, 0, 1);
+
+    THTensor_(addmm)(gradWeightO, scale, gradWeightO, 1, hidden_t, grad_next_h);
+    THTensor_(resize2d)(grad_hidden, batchsize, hiddensize);
+    THTensor_(addmm)(grad_hidden, 0, grad_hidden, 1, grad_next_h, weightO_t);
+
+    grad_next_h = grad_hidden;
+
+    THTensor_(free)(hidden_t);
+    THTensor_(free)(weightO_t);
+
+    // push results to top of stack
+    luaT_pushudata(L, grad_cur_x, torch_Tensor);
+    luaT_pushudata(L, grad_prev_h, torch_Tensor);
+    luaT_pushudata(L, grad_prev_c, torch_Tensor);
+  }
+
   THTensor_(resize2d)(grad_cur_x, batchsize, inputsize);
   THTensor_(resize2d)(grad_prev_h, batchsize, outputsize);
-  THTensor_(resize2d)(grad_prev_c, batchsize, outputsize);
+  THTensor_(resize2d)(grad_prev_c, batchsize, hiddensize);
 
   // these tensors were set-up in updateOutput
   THTensor *Wx = THTensor_(newNarrow)(weight, 0, 0, inputsize);
   THTensor *Wh = THTensor_(newNarrow)(weight, 0, inputsize, outputsize);
 
-  THTensor *input_gate = THTensor_(newNarrow)(gates, 1, 0, outputsize);
-  THTensor *forget_gate = THTensor_(newNarrow)(gates, 1, outputsize, outputsize);
-  THTensor *output_gate = THTensor_(newNarrow)(gates, 1, 2*outputsize, outputsize);
-  THTensor *input_transform = THTensor_(newNarrow)(gates, 1, 3*outputsize, outputsize);
+  THTensor *input_gate = THTensor_(newNarrow)(gates, 1, 0, hiddensize);
+  THTensor *forget_gate = THTensor_(newNarrow)(gates, 1, hiddensize, hiddensize);
+  THTensor *output_gate = THTensor_(newNarrow)(gates, 1, 2*hiddensize, hiddensize);
+  THTensor *input_transform = THTensor_(newNarrow)(gates, 1, 3*hiddensize, hiddensize);
 
   // set-up grad tensors
-
   THTensor *grad_Wx = THTensor_(newNarrow)(gradWeight, 0, 0, inputsize);
   THTensor *grad_Wh = THTensor_(newNarrow)(gradWeight, 0, inputsize, outputsize);
 
-  THTensor_(resize2d)(grad_gates, batchsize, 4 * outputsize);
+  THTensor_(resize2d)(grad_gates, batchsize, 4 * hiddensize);
   THTensor_(fill)(grad_gates, 0);
 
-  THTensor *grad_input_gate = THTensor_(newNarrow)(grad_gates, 1, 0, outputsize);
-  THTensor *grad_forget_gate = THTensor_(newNarrow)(grad_gates, 1, outputsize, outputsize);
-  THTensor *grad_output_gate = THTensor_(newNarrow)(grad_gates, 1, 2*outputsize, outputsize);
-  THTensor *grad_input_transform = THTensor_(newNarrow)(grad_gates, 1, 3*outputsize, outputsize);
+  THTensor *grad_input_gate = THTensor_(newNarrow)(grad_gates, 1, 0, hiddensize);
+  THTensor *grad_forget_gate = THTensor_(newNarrow)(grad_gates, 1, hiddensize, hiddensize);
+  THTensor *grad_output_gate = THTensor_(newNarrow)(grad_gates, 1, 2*hiddensize, hiddensize);
+  THTensor *grad_input_transform = THTensor_(newNarrow)(grad_gates, 1, 3*hiddensize, hiddensize);
 
   // backward
 
   // we use grad_[input,forget,output]_gate as temporary buffers to compute grad_prev_c.
   THTensor_(tanh)(grad_input_gate, next_c);
   THTensor_(cmul)(grad_forget_gate, grad_input_gate, grad_input_gate);
-  //grad_output_gate:fill(1):add(-1, grad_forget_gate):cmul(output_gate):cmul(grad_next_h)
+
   THTensor_(fill)(grad_output_gate, 1);
   THTensor_(cadd)(grad_output_gate, grad_output_gate, -1, grad_forget_gate);
   THTensor_(cmul)(grad_output_gate, grad_output_gate, output_gate);
@@ -166,7 +201,7 @@ static int nn_(StepLSTM_backward)(lua_State *L) {
   THTensor_(addmm)(grad_cur_x, 0, grad_cur_x, 1, grad_gates, Wx_t);
   THTensor_(addmm)(grad_Wx, 1, grad_Wx, scale, cur_x_t, grad_gates);
   THTensor_(addmm)(grad_Wh, 1, grad_Wh, scale, prev_h_t, grad_gates);
-  THTensor_(resize2d)(grad_gates_sum, 1, 4 * outputsize);
+  THTensor_(resize2d)(grad_gates_sum, 1, 4 * hiddensize);
   THTensor_(sum)(grad_gates_sum, grad_gates, 0);
   THTensor_(cadd)(grad_b, grad_b, scale, grad_gates_sum);
 

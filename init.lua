@@ -148,6 +148,7 @@ require('rnn.MaskZeroCriterion')
 -- deprecated modules
 require('rnn.FastLSTM')
 require('rnn.Recurrent')
+require('rnn.SeqLSTMP')
 
 -- prevent likely name conflicts
 nn.rnn = rnn

@@ -6,15 +6,24 @@
 -- Output: {hidden[t], cell[t]}
 local StepLSTM, parent = torch.class('nn.StepLSTM', 'nn.Module')
 
-function StepLSTM:__init(inputsize, outputsize)
+function StepLSTM:__init(inputsize, hiddensize, outputsize)
    parent.__init(self)
-   self.inputsize, self.outputsize = inputsize, outputsize
+   if hiddensize and outputsize then
+      -- implements LSTMP
+      self.weightO = torch.Tensor(hiddensize, outputsize)
+      self.gradWeightO = torch.Tensor(hiddensize, outputsize)
+   else
+      -- implements LSTM
+      assert(inputsize and hiddensize and not outputsize)
+      outputsize = hiddensize
+   end
+   self.inputsize, self.hiddensize, self.outputsize = inputsize, hiddensize, outputsize
 
-   self.weight = torch.Tensor(inputsize+outputsize, 4 * outputsize)
-   self.gradWeight = torch.Tensor(inputsize+outputsize, 4 * outputsize)
+   self.weight = torch.Tensor(inputsize+outputsize, 4 * hiddensize)
+   self.gradWeight = torch.Tensor(inputsize+outputsize, 4 * hiddensize)
 
-   self.bias = torch.Tensor(4 * outputsize)
-   self.gradBias = torch.Tensor(4 * outputsize):zero()
+   self.bias = torch.Tensor(4 * hiddensize)
+   self.gradBias = torch.Tensor(4 * hiddensize):zero()
    self:reset()
 
    self.gates = torch.Tensor() -- batchsize x 4*outputsize
@@ -27,14 +36,13 @@ function StepLSTM:__init(inputsize, outputsize)
    self.maskzero = false
 end
 
-
 function StepLSTM:reset(std)
-   if not std then
-      std = 1.0 / math.sqrt(self.outputsize + self.inputsize)
-   end
    self.bias:zero()
    self.bias[{{self.outputsize + 1, 2 * self.outputsize}}]:fill(1)
-   self.weight:normal(0, std)
+   self.weight:normal(0, std or (1.0 / math.sqrt(self.hiddensize + self.inputsize)))
+   if self.weightO then
+      self.weightO:normal(0, std or (1.0 / math.sqrt(self.outputsize + self.hiddensize)))
+   end
    return self
 end
 
@@ -63,36 +71,56 @@ function StepLSTM:updateOutput(input)
    local cur_x, prev_h, prev_c = input[1], input[2], input[3]
    local next_h, next_c = self.output[1], self.output[2]
    if cur_x.nn.StepLSTM_updateOutput and not self.forceLua then
-      cur_x.nn.StepLSTM_updateOutput(self.weight, self.bias, self.gates, cur_x, prev_h, prev_c, next_h, next_c)
+      if self.weightO then -- LSTMP
+         self.hidden = self.hidden or cur_x.new()
+         cur_x.nn.StepLSTM_updateOutput(self.weight, self.bias, self.gates,
+                                        cur_x, prev_h, prev_c,
+                                        self.inputsize, self.hiddensize, self.outputsize,
+                                        self.hidden, next_c, self.weightO, next_h)
+      else -- LSTM
+         cur_x.nn.StepLSTM_updateOutput(self.weight, self.bias, self.gates,
+                                        cur_x, prev_h, prev_c,
+                                        self.inputsize, self.hiddensize, self.outputsize,
+                                        next_h, next_c)
+      end
    else
+      if self.weightO then -- LSTMP
+         self.hidden = self.hidden or cur_x.new()
+         next_h = self.hidden
+      end
       assert(torch.isTensor(prev_h))
       assert(torch.isTensor(prev_c))
-      local batchsize, inputsize, outputsize = cur_x:size(1), cur_x:size(2), self.outputsize
+      local batchsize, inputsize, hiddensize = cur_x:size(1), cur_x:size(2), self.hiddensize
       assert(inputsize == self.inputsize)
 
       -- TODO use self.bias_view
-      local bias_expand = self.bias:view(1, 4 * outputsize):expand(batchsize, 4 * outputsize)
+      local bias_expand = self.bias:view(1, 4 * hiddensize):expand(batchsize, 4 * hiddensize)
       local Wx = self.weight:narrow(1,1,inputsize)
-      local Wh = self.weight:narrow(1,inputsize+1,outputsize)
+      local Wh = self.weight:narrow(1,inputsize+1,self.outputsize)
 
-      next_h:resize(batchsize, outputsize)
-      next_c:resize(batchsize, outputsize)
+      next_h:resize(batchsize, hiddensize)
+      next_c:resize(batchsize, hiddensize)
 
-      self.gates:resize(batchsize, 4 * outputsize):zero()
+      self.gates:resize(batchsize, 4 * hiddensize):zero()
       local gates = self.gates
 
       -- forward
       gates:addmm(bias_expand, cur_x, Wx)
       gates:addmm(prev_h, Wh)
-      gates[{{}, {1, 3 * outputsize}}]:sigmoid()
-      gates[{{}, {3 * outputsize + 1, 4 * outputsize}}]:tanh()
-      local input_gate = gates[{{}, {1, outputsize}}]
-      local forget_gate = gates[{{}, {outputsize + 1, 2 * outputsize}}]
-      local output_gate = gates[{{}, {2 * outputsize + 1, 3 * outputsize}}]
-      local input_transform = gates[{{}, {3 * outputsize + 1, 4 * outputsize}}]
+      gates[{{}, {1, 3 * hiddensize}}]:sigmoid()
+      gates[{{}, {3 * hiddensize + 1, 4 * hiddensize}}]:tanh()
+      local input_gate = gates[{{}, {1, hiddensize}}]
+      local forget_gate = gates[{{}, {hiddensize + 1, 2 * hiddensize}}]
+      local output_gate = gates[{{}, {2 * hiddensize + 1, 3 * hiddensize}}]
+      local input_transform = gates[{{}, {3 * hiddensize + 1, 4 * hiddensize}}]
       next_h:cmul(input_gate, input_transform)
       next_c:cmul(forget_gate, prev_c):add(next_h)
       next_h:tanh(next_c):cmul(output_gate)
+
+      if self.weightO then -- LSTMP
+         self.output[1]:resize(batchsize, self.outputsize)
+         self.output[1]:mm(next_h, self.weightO)
+      end
    end
 
    if self.maskzero then
@@ -126,36 +154,58 @@ function StepLSTM:backward(input, gradOutput, scale)
    end
 
    if cur_x.nn.StepLSTM_backward and not self.forceLua then
-      cur_x.nn.StepLSTM_backward(self.weight, self.gates, self.gradWeight, self.gradBias, grad_gates, grad_gates_sum,
-                                 cur_x, prev_h, prev_c, next_c, grad_next_h, grad_next_c, scale, grad_cur_x, grad_prev_h, grad_prev_c)
+      if self.weightO then -- LSTMP
+         local grad_hidden = torch.getBuffer('StepLSTM', 'grad_hidden', self.hidden)
+         cur_x.nn.StepLSTM_backward(self.weight, self.gates,
+                                    self.gradWeight, self.gradBias, grad_gates, grad_gates_sum,
+                                    cur_x, prev_h, prev_c, next_c, grad_next_h, grad_next_c,
+                                    scale, self.inputsize, self.hiddensize, self.outputsize,
+                                    grad_cur_x, grad_prev_h, grad_prev_c,
+                                    self.weightO, self.hidden, self.gradWeightO, grad_hidden)
+      else -- LSTM
+         cur_x.nn.StepLSTM_backward(self.weight, self.gates,
+                                    self.gradWeight, self.gradBias, grad_gates, grad_gates_sum,
+                                    cur_x, prev_h, prev_c, next_c, grad_next_h, grad_next_c,
+                                    scale, self.inputsize, self.hiddensize, self.outputsize,
+                                    grad_cur_x, grad_prev_h, grad_prev_c)
+      end
    else
-      local batchsize, inputsize, outputsize = cur_x:size(1), cur_x:size(2), self.outputsize
+      local batchsize, inputsize, hiddensize = cur_x:size(1), cur_x:size(2), self.hiddensize
       assert(inputsize == self.inputsize)
 
+      if self.weightO then -- LSTMP
+         local grad_hidden = torch.getBuffer('StepLSTM', 'grad_hidden', self.hidden)
+
+         self.gradWeightO:addmm(scale, self.hidden:t(), grad_next_h)
+         grad_hidden:resize(batchsize, hiddensize)
+         grad_hidden:mm(grad_next_h, self.weightO:t())
+         grad_next_h = grad_hidden
+      end
+
       grad_cur_x:resize(batchsize, inputsize)
-      grad_prev_h:resize(batchsize, outputsize)
-      grad_prev_c:resize(batchsize, outputsize)
+      grad_prev_h:resize(batchsize, self.outputsize)
+      grad_prev_c:resize(batchsize, hiddensize)
 
       local Wx = self.weight:narrow(1,1,inputsize)
-      local Wh = self.weight:narrow(1,inputsize+1,outputsize)
+      local Wh = self.weight:narrow(1,inputsize+1,self.outputsize)
       local grad_Wx = self.gradWeight:narrow(1,1,inputsize)
-      local grad_Wh = self.gradWeight:narrow(1,inputsize+1,outputsize)
+      local grad_Wh = self.gradWeight:narrow(1,inputsize+1,self.outputsize)
       local grad_b = self.gradBias
 
       local gates = self.gates
 
       -- backward
 
-      local input_gate = gates[{{}, {1, outputsize}}]
-      local forget_gate = gates[{{}, {outputsize + 1, 2 * outputsize}}]
-      local output_gate = gates[{{}, {2 * outputsize + 1, 3 * outputsize}}]
-      local input_transform = gates[{{}, {3 * outputsize + 1, 4 * outputsize}}]
+      local input_gate = gates[{{}, {1, hiddensize}}]
+      local forget_gate = gates[{{}, {hiddensize + 1, 2 * hiddensize}}]
+      local output_gate = gates[{{}, {2 * hiddensize + 1, 3 * hiddensize}}]
+      local input_transform = gates[{{}, {3 * hiddensize + 1, 4 * hiddensize}}]
 
-      grad_gates:resize(batchsize, 4 * outputsize):zero()
-      local grad_input_gate = grad_gates[{{}, {1, outputsize}}]
-      local grad_forget_gate = grad_gates[{{}, {outputsize + 1, 2 * outputsize}}]
-      local grad_output_gate = grad_gates[{{}, {2 * outputsize + 1, 3 * outputsize}}]
-      local grad_input_transform = grad_gates[{{}, {3 * outputsize + 1, 4 * outputsize}}]
+      grad_gates:resize(batchsize, 4 * hiddensize):zero()
+      local grad_input_gate = grad_gates[{{}, {1, hiddensize}}]
+      local grad_forget_gate = grad_gates[{{}, {hiddensize + 1, 2 * hiddensize}}]
+      local grad_output_gate = grad_gates[{{}, {2 * hiddensize + 1, 3 * hiddensize}}]
+      local grad_input_transform = grad_gates[{{}, {3 * hiddensize + 1, 4 * hiddensize}}]
 
       -- we use grad_[input,forget,output]_gate as temporary buffers to compute grad_prev_c.
       grad_input_gate:tanh(next_c)
@@ -177,7 +227,7 @@ function StepLSTM:backward(input, gradOutput, scale)
       grad_cur_x:mm(grad_gates, Wx:t())
       grad_Wx:addmm(scale, cur_x:t(), grad_gates)
       grad_Wh:addmm(scale, prev_h:t(), grad_gates)
-      grad_gates_sum:resize(1, 4 * outputsize):sum(grad_gates, 1)
+      grad_gates_sum:resize(1, 4 * hiddensize):sum(grad_gates, 1)
       grad_b:add(scale, grad_gates_sum)
 
       grad_prev_h:mm(grad_gates, Wh:t())
@@ -200,7 +250,6 @@ function StepLSTM:accGradParameters(input, gradOutput, scale)
    end
 end
 
-
 function StepLSTM:clearState()
    self.gates:set()
 
@@ -217,3 +266,17 @@ function StepLSTM:type(type, ...)
    self:clearState()
    return parent.type(self, type, ...)
 end
+
+function StepLSTM:parameters()
+   return {self.weight, self.bias, self.weightO}, {self.gradWeight, self.gradBias, self.gradWeightO}
+end
+
+-- for sharedClone
+local _ = require 'moses'
+local params = _.clone(parent.dpnn_parameters)
+table.insert(params, 'weightO')
+StepLSTM.dpnn_parameters = params
+
+local gradParams = _.clone(parent.dpnn_gradParameters)
+table.insert(gradParams, 'gradWeightO')
+StepLSTM.dpnn_gradParameters = gradParams

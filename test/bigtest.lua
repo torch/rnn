@@ -486,6 +486,8 @@ function rnnbigtest.LSTM()
    luarec.modules[1].forceLua = true
    lstms.luarec = nn.Sequencer(luarec)
    lstms.seq = nn.SeqLSTM(inputsize, outputsize)
+   lstms.luaseq = nn.SeqLSTM(inputsize, outputsize)
+   lstms.luaseq.forceLua = true
 
    local input = torch.Tensor(seqlen, batchsize, inputsize)
    local gradOutput = torch.Tensor(seqlen, batchsize, outputsize)
@@ -510,13 +512,14 @@ function rnnbigtest.LSTM()
       lstm.testtime = t:time().real/10
    end
 
-   for i,name in ipairs{'fast','step','luarec','rec','seq'} do
+   for i,name in ipairs{'fast','step','luarec','rec', 'luaseq', 'seq'} do
       print(name..' LSTM time: '..lstms[name].testtime..' seconds')
    end
 
    print("RecLSTM-C "..(lstms.luarec.testtime/lstms.rec.testtime)..' faster than RecLSTM-Lua')
    print("RecLSTM "..(lstms.fast.testtime/lstms.rec.testtime)..' faster than FastLSTM')
    print("SeqLSTM "..(lstms.rec.testtime/lstms.seq.testtime)..' faster than RecLSTM')
+   print("SeqLSTM-C "..(lstms.luaseq.testtime/lstms.seq.testtime)..' faster than SeqLSTM-Lua')
 
    print("Memory test")
 

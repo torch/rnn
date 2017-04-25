@@ -42,16 +42,23 @@ local SeqLSTM, parent = torch.class('nn.SeqLSTM', 'nn.Module')
 
 function SeqLSTM:__init(inputsize, hiddensize, outputsize)
    parent.__init(self)
-   -- for non-SeqLSTMP, only inputsize, hiddensize=outputsize are provided
-   outputsize = outputsize or hiddensize
-   local D, H, R = inputsize, hiddensize, outputsize
-   self.inputsize, self.hiddensize, self.outputsize = D, H, R
 
-   self.weight = torch.Tensor(D+R, 4 * H)
-   self.gradWeight = torch.Tensor(D+R, 4 * H)
+   if hiddensize and outputsize then
+      -- implements LSTMP
+      self.weightO = torch.Tensor(hiddensize, outputsize)
+      self.gradWeightO = torch.Tensor(hiddensize, outputsize)
+   else
+      -- implements LSTM
+      assert(inputsize and hiddensize and not outputsize)
+      outputsize = hiddensize
+   end
+   self.inputsize, self.hiddensize, self.outputsize = inputsize, hiddensize, outputsize
 
-   self.bias = torch.Tensor(4 * H)
-   self.gradBias = torch.Tensor(4 * H):zero()
+   self.weight = torch.Tensor(inputsize+outputsize, 4 * hiddensize)
+   self.gradWeight = torch.Tensor(inputsize+outputsize, 4 * hiddensize)
+
+   self.bias = torch.Tensor(4 * hiddensize)
+   self.gradBias = torch.Tensor(4 * hiddensize):zero()
    self:reset()
 
    self.cell = torch.Tensor()    -- This will be  (T, N, H)
@@ -80,12 +87,12 @@ function SeqLSTM:__init(inputsize, hiddensize, outputsize)
 end
 
 function SeqLSTM:reset(std)
-   if not std then
-      std = 1.0 / math.sqrt(self.outputsize + self.inputsize)
-   end
    self.bias:zero()
    self.bias[{{self.outputsize + 1, 2 * self.outputsize}}]:fill(1)
-   self.weight:normal(0, std)
+   self.weight:normal(0, std or (1.0 / math.sqrt(self.hiddensize + self.inputsize)))
+   if self.weightO then
+      self.weightO:normal(0, std or (1.0 / math.sqrt(self.outputsize + self.hiddensize)))
+   end
    return self
 end
 
@@ -236,20 +243,43 @@ function SeqLSTM:updateOutput(input)
       self.next_h = h[t]
       local next_c = c[t]
       local cur_gates = self.gates[t]
-      cur_gates:addmm(bias_expand, cur_x, Wx)
-      cur_gates:addmm(prev_h, Wh)
-      cur_gates[{{}, {1, 3 * H}}]:sigmoid()
-      cur_gates[{{}, {3 * H + 1, 4 * H}}]:tanh()
-      local i = cur_gates[{{}, {1, H}}] -- input gate
-      local f = cur_gates[{{}, {H + 1, 2 * H}}] -- forget gate
-      local o = cur_gates[{{}, {2 * H + 1, 3 * H}}] -- output gate
-      local g = cur_gates[{{}, {3 * H + 1, 4 * H}}] -- input transform
-      self.next_h:cmul(i, g)
-      next_c:cmul(f, prev_c):add(self.next_h)
-      self.next_h:tanh(next_c):cmul(o)
 
-      -- for LSTMP
-      self:adapter(t)
+      if cur_x.nn.StepLSTM_updateOutput and not self.forceLua then
+         if self.weightO then
+            self._hidden = self._hidden or self.next_h.new()
+            self._hidden:resize(T, N, self.hiddensize)
+            cur_x.nn.StepLSTM_updateOutput(self.weight, self.bias,
+                                           cur_gates, cur_x, prev_h, prev_c,
+                                           self.inputsize, self.hiddensize, self.outputsize,
+                                           self._hidden[t], next_c, self.weightO, self.next_h)
+         else
+            cur_x.nn.StepLSTM_updateOutput(self.weight, self.bias,
+                                           cur_gates, cur_x, prev_h, prev_c,
+                                           self.inputsize, self.hiddensize, self.outputsize,
+                                           self.next_h, next_c)
+         end
+      else
+         cur_gates:addmm(bias_expand, cur_x, Wx)
+         cur_gates:addmm(prev_h, Wh)
+         cur_gates[{{}, {1, 3 * H}}]:sigmoid()
+         cur_gates[{{}, {3 * H + 1, 4 * H}}]:tanh()
+         local i = cur_gates[{{}, {1, H}}] -- input gate
+         local f = cur_gates[{{}, {H + 1, 2 * H}}] -- forget gate
+         local o = cur_gates[{{}, {2 * H + 1, 3 * H}}] -- output gate
+         local g = cur_gates[{{}, {3 * H + 1, 4 * H}}] -- input transform
+         self.next_h:cmul(i, g)
+         next_c:cmul(f, prev_c):add(self.next_h)
+         self.next_h:tanh(next_c):cmul(o)
+
+         if self.weightO then -- LSTMP
+            self._hidden = self._hidden or self.next_h.new()
+            self._hidden:resize(T, N, self.hiddensize)
+
+            self._hidden[t]:copy(self.next_h)
+            self.next_h:resize(N,self.outputsize)
+            self.next_h:mm(self._hidden[t], self.weightO)
+         end
+      end
 
       if self.maskzero then
          -- build mask from input
@@ -274,10 +304,6 @@ function SeqLSTM:updateOutput(input)
    end
 
    return self.output
-end
-
-function SeqLSTM:adapter(scale, t)
-   -- Placeholder for SeqLSTMP
 end
 
 function SeqLSTM:backward(input, gradOutput, scale)
@@ -323,10 +349,11 @@ function SeqLSTM:backward(input, gradOutput, scale)
       end
       self.grad_next_h:add(grad_h[t])
 
+      local cur_x = x[t]
+
       if self.maskzero and torch.type(self) ~= 'nn.SeqLSTM' then
          -- we only do this for sub-classes (LSTM doesn't need it)
          -- build mask from input
-         local cur_x = x[t]
          local vectorDim = cur_x:dim()
          self._zeroMask = self._zeroMask or cur_x.new()
          self._zeroMask:norm(cur_x, 2, vectorDim)
@@ -336,51 +363,77 @@ function SeqLSTM:backward(input, gradOutput, scale)
          self:recursiveMask(self.grad_next_h, self.zeroMask)
       end
 
-      -- for LSTMP
-      self:gradAdapter(scale, t)
+      if prev_h.nn.StepLSTM_backward and not self.forceLua then
+         if self.weightO then
+            self.grad_hidden = self.grad_hidden or cur_x.new()
+            cur_x.nn.StepLSTM_backward(self.weight, self.gates[t], self.gradWeight, self.gradBias,
+                                       self.grad_a_buffer, self.buffer3,
+                                       cur_x, prev_h, prev_c, next_c,
+                                       self.grad_next_h, grad_next_c,
+                                       scale, self.inputsize, self.hiddensize, self.outputsize,
+                                       grad_x[t], self.grad_next_h, grad_next_c,
+                                       self.weightO, self._hidden[t], self.gradWeightO, self.grad_hidden)
+         else
+            cur_x.nn.StepLSTM_backward(self.weight, self.gates[t], self.gradWeight, self.gradBias,
+                                       self.grad_a_buffer, self.buffer3,
+                                       cur_x, prev_h, prev_c, next_c,
+                                       self.grad_next_h, grad_next_c,
+                                       scale, self.inputsize, self.hiddensize, self.outputsize,
+                                       grad_x[t], self.grad_next_h, grad_next_c)
+         end
+      else
 
-      local i = self.gates[{t, {}, {1, H}}]
-      local f = self.gates[{t, {}, {H + 1, 2 * H}}]
-      local o = self.gates[{t, {}, {2 * H + 1, 3 * H}}]
-      local g = self.gates[{t, {}, {3 * H + 1, 4 * H}}]
+         if self.weightO then -- LSTMP
+            self.buffer3:resizeAs(self.grad_next_h):copy(self.grad_next_h)
 
-      local grad_a = self.grad_a_buffer:resize(N, 4 * H):zero()
-      local grad_ai = grad_a[{{}, {1, H}}]
-      local grad_af = grad_a[{{}, {H + 1, 2 * H}}]
-      local grad_ao = grad_a[{{}, {2 * H + 1, 3 * H}}]
-      local grad_ag = grad_a[{{}, {3 * H + 1, 4 * H}}]
+            self.gradWeightO:addmm(scale, self._hidden[t]:t(), self.grad_next_h)
+            self.grad_next_h:resize(self._output:size(2), self.hiddensize)
+            self.grad_next_h:mm(self.buffer3, self.weightO:t())
+         end
 
-      -- We will use grad_ai, grad_af, and grad_ao as temporary buffers
-      -- to to compute grad_next_c. We will need tanh_next_c (stored in grad_ai)
-      -- to compute grad_ao; the other values can be overwritten after we compute
-      -- grad_next_c
-      local tanh_next_c = grad_ai:tanh(next_c)
-      local tanh_next_c2 = grad_af:cmul(tanh_next_c, tanh_next_c)
-      local my_grad_next_c = grad_ao
-      my_grad_next_c:fill(1):add(-1, tanh_next_c2):cmul(o):cmul(self.grad_next_h)
-      grad_next_c:add(my_grad_next_c)
+         local i = self.gates[{t, {}, {1, H}}]
+         local f = self.gates[{t, {}, {H + 1, 2 * H}}]
+         local o = self.gates[{t, {}, {2 * H + 1, 3 * H}}]
+         local g = self.gates[{t, {}, {3 * H + 1, 4 * H}}]
 
-      -- We need tanh_next_c (currently in grad_ai) to compute grad_ao; after
-      -- that we can overwrite it.
-      grad_ao:fill(1):add(-1, o):cmul(o):cmul(tanh_next_c):cmul(self.grad_next_h)
+         local grad_a = self.grad_a_buffer:resize(N, 4 * H):zero()
+         local grad_ai = grad_a[{{}, {1, H}}]
+         local grad_af = grad_a[{{}, {H + 1, 2 * H}}]
+         local grad_ao = grad_a[{{}, {2 * H + 1, 3 * H}}]
+         local grad_ag = grad_a[{{}, {3 * H + 1, 4 * H}}]
 
-      -- Use grad_ai as a temporary buffer for computing grad_ag
-      local g2 = grad_ai:cmul(g, g)
-      grad_ag:fill(1):add(-1, g2):cmul(i):cmul(grad_next_c)
+         -- We will use grad_ai, grad_af, and grad_ao as temporary buffers
+         -- to to compute grad_next_c. We will need tanh_next_c (stored in grad_ai)
+         -- to compute grad_ao; the other values can be overwritten after we compute
+         -- grad_next_c
+         local tanh_next_c = grad_ai:tanh(next_c)
+         local tanh_next_c2 = grad_af:cmul(tanh_next_c, tanh_next_c)
+         local my_grad_next_c = grad_ao
+         my_grad_next_c:fill(1):add(-1, tanh_next_c2):cmul(o):cmul(self.grad_next_h)
+         grad_next_c:add(my_grad_next_c)
 
-      -- We don't need any temporary storage for these so do them last
-      grad_ai:fill(1):add(-1, i):cmul(i):cmul(g):cmul(grad_next_c)
-      grad_af:fill(1):add(-1, f):cmul(f):cmul(prev_c):cmul(grad_next_c)
+         -- We need tanh_next_c (currently in grad_ai) to compute grad_ao; after
+         -- that we can overwrite it.
+         grad_ao:fill(1):add(-1, o):cmul(o):cmul(tanh_next_c):cmul(self.grad_next_h)
 
-      grad_x[t]:mm(grad_a, Wx:t())
-      grad_Wx:addmm(scale, x[t]:t(), grad_a)
-      grad_Wh:addmm(scale, prev_h:t(), grad_a)
-      local grad_a_sum = self.buffer3:resize(1, 4 * H):sum(grad_a, 1)
-      grad_b:add(scale, grad_a_sum)
+         -- Use grad_ai as a temporary buffer for computing grad_ag
+         local g2 = grad_ai:cmul(g, g)
+         grad_ag:fill(1):add(-1, g2):cmul(i):cmul(grad_next_c)
 
-      self.grad_next_h = torch.mm(grad_a, Wh:t()) -- TODO : use buffer
-      grad_next_c:cmul(f)
+         -- We don't need any temporary storage for these so do them last
+         grad_ai:fill(1):add(-1, i):cmul(i):cmul(g):cmul(grad_next_c)
+         grad_af:fill(1):add(-1, f):cmul(f):cmul(prev_c):cmul(grad_next_c)
 
+         grad_x[t]:mm(grad_a, Wx:t())
+         grad_Wx:addmm(scale, x[t]:t(), grad_a)
+         grad_Wh:addmm(scale, prev_h:t(), grad_a)
+         local grad_a_sum = self.buffer3:resize(1, 4 * H):sum(grad_a, 1)
+         grad_b:add(scale, grad_a_sum)
+
+         self.grad_next_h:resize(N, R)
+         self.grad_next_h:mm(grad_a, Wh:t())
+         grad_next_c:cmul(f)
+      end
    end
    grad_h0:copy(self.grad_next_h)
    grad_c0:copy(grad_next_c)
@@ -406,10 +459,6 @@ function SeqLSTM:backward(input, gradOutput, scale)
    return self.gradInput
 end
 
-function SeqLSTM:gradAdapter(scale, t)
-   -- Placeholder for SeqLSTMP
-end
-
 function SeqLSTM:clearState()
    self.cell:set()
    self.gates:set()
@@ -425,6 +474,8 @@ function SeqLSTM:clearState()
    self.output:set()
    self._output = nil
    self.gradInput = nil
+   self.grad_hidden = nil
+   self.hidden = nil
 
    self.zeroMask = nil
    self._zeroMask = nil
@@ -482,7 +533,24 @@ function SeqLSTM:evaluate()
    assert(self.train == false)
 end
 
+function SeqLSTM:maskZero()
+   self.maskzero = true
+   return self
+end
+
+function SeqLSTM:parameters()
+   return {self.weight, self.bias, self.weightO}, {self.gradWeight, self.gradBias, self.gradWeightO}
+end
+
+
+-- for sharedClone
+SeqLSTM.dpnn_parameters = {'weight', 'bias', 'weightO'}
+SeqLSTM.dpnn_gradParameters = {'gradWeight', 'gradBias', 'gradWeightO'}
+
+-- DEPRECATED
+
 function SeqLSTM:toFastLSTM()
+   assert(not self.weightO)
    local D, H = self.inputsize, self.outputsize
    -- input : x to ...
    local Wxi = self.weight[{{1, D},{1, H}}]
@@ -553,9 +621,4 @@ function SeqLSTM:toFastLSTM()
    gb[{{3 * H + 1, 4 * H}}]:copy(gbo)
 
    return lstm
-end
-
-function SeqLSTM:maskZero()
-   self.maskzero = true
-   return self
 end

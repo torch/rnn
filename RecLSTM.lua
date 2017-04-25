@@ -1,11 +1,12 @@
 local RecLSTM, parent = torch.class('nn.RecLSTM', 'nn.LSTM')
 
-function RecLSTM:__init(inputsize, outputsize, seqlen)
-   parent.__init(self, inputsize, outputsize, seqlen)
+function RecLSTM:__init(inputsize, hiddensize, outputsize)
+   self._sizes = {inputsize, hiddensize, outputsize}
+   parent.__init(self, inputsize, outputsize or hiddensize, 999999)
 end
 
 function RecLSTM:buildModel()
-   return nn.StepLSTM(self.inputSize, self.outputSize)
+   return nn.StepLSTM(unpack(self._sizes))
 end
 
 function RecLSTM:maskZero()
