@@ -7238,6 +7238,40 @@ function rnntest.RecLSTM()
    end
 end
 
+function rnntest.RecLSTM_projection()
+   local seqlen, batchsize = 3, 4
+   local inputsize, hiddensize, outputsize = 2, 6, 5
+   local reclstm = nn.RecLSTM(inputsize, hiddensize, outputsize)
+   local lstm = nn.Sequencer(reclstm)
+
+   local input = torch.randn(seqlen, batchsize, inputsize)
+   local output = lstm:forward(input)
+
+   local seqlstm = nn.SeqLSTM(inputsize, hiddensize, outputsize)
+   seqlstm.weight:copy(reclstm.modules[1].weight)
+   seqlstm.bias:copy(reclstm.modules[1].bias)
+   seqlstm.weightO:copy(reclstm.modules[1].weightO)
+
+   local output2 = seqlstm:forward(input)
+   mytester:assertTensorEq(output, output2, 0.000001)
+
+   lstm:zeroGradParameters()
+   seqlstm:zeroGradParameters()
+
+   local gradOutput = torch.randn(seqlen, batchsize, outputsize)
+   local gradInput = lstm:backward(input, gradOutput)
+
+   local gradInput2 = seqlstm:backward(input, gradOutput)
+   mytester:assertTensorEq(gradInput, gradInput2, 0.000001)
+
+   local params, gradParams = lstm:parameters()
+   local params2, gradParams2 = seqlstm:parameters()
+
+   for i=1,3 do
+      mytester:assertTensorEq(gradParams[i], gradParams2[i], 0.0000001)
+   end
+end
+
 function rnntest.RecLSTM_maskzero()
    local T, N, D, H = 3, 2, 4, 5
    local reclstm = nn.RecLSTM(D,H):maskZero()

@@ -18,20 +18,22 @@ rec LSTM memory: 77.209584236145:32.063309669495 MB
 seq LSTM memory: 59.674856185913:36.158442497253 MB
 ```
 
-Moving StepLSTM to C and changing inputsize, outputsize = 512, 512 to 128, 128 (emphasizes non-BLAS overhead).
+Moving StepLSTM and SeqLSTM to C and changing inputsize, outputsize = 512, 512 to 128, 128 (emphasizes non-BLAS overhead).
 
 ```
-fast LSTM time: 0.12676219940186 seconds
-step LSTM time: 0.083592581748962 seconds
-luarec LSTM time: 0.078796887397766 seconds
-rec LSTM time: 0.068624520301819 seconds
-seq LSTM time: 0.06977710723877 seconds
-RecLSTM-C 1.1482322506767 faster than RecLSTM-Lua
-RecLSTM 1.8471852166593 faster than FastLSTM
-SeqLSTM 0.98348187560991 faster than RecLSTM
+fast LSTM time: 0.12144248485565 seconds
+step LSTM time: 0.073302102088928 seconds
+luarec LSTM time: 0.075324392318726 seconds
+rec LSTM time: 0.066254210472107 seconds
+luaseq LSTM time: 0.067860889434814 seconds
+seq LSTM time: 0.062430810928345 seconds
+RecLSTM-C 1.1368997046676 faster than RecLSTM-Lua
+RecLSTM 1.8329776174267 faster than FastLSTM
+SeqLSTM 1.0612421893438 faster than RecLSTM
+SeqLSTM-C 1.0869775424302 faster than SeqLSTM-Lua
 Memory test
 fast LSTM memory: 98.27904510498:2.2750110626221 MB
-step LSTM memory: 17.33301448822:2.1554565429688 MB
-rec LSTM memory: 13.508204460144:2.0672521591187 MB
-seq LSTM memory: 8.9209499359131:3.0412549972534 MB
+step LSTM memory: 17.168065071106:2.1289348602295 MB
+rec LSTM memory: 13.374607086182:2.0407600402832 MB
+seq LSTM memory: 8.8895826339722:3.0098876953125 MB
 ```

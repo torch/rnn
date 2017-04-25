@@ -24,7 +24,7 @@ SET(luasrc
   GRU.lua
   LinearNoBias.lua
   LookupTableMaskZero.lua
-  LSTM.lua
+  deprecated/LSTM.lua
   MaskZero.lua
   MaskZeroCriterion.lua
   Module.lua
