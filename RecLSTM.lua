@@ -1,3 +1,4 @@
+local _ = require 'moses'
 local RecLSTM, parent = torch.class('nn.RecLSTM', 'nn.AbstractRecurrent')
 
 function RecLSTM:__init(inputsize, hiddensize, outputsize)
@@ -126,8 +127,9 @@ function RecLSTM:_updateGradInput(input, gradOutput)
    local _gradOutput, gradCell = gradHiddenState[1], gradHiddenState[2]
    assert(_gradOutput and gradCell)
 
-   self._gradOutputs[step] = nn.rnn.recursiveCopy(self._gradOutputs[step], _gradOutput)
-   nn.rnn.recursiveAdd(self._gradOutputs[step], gradOutput)
+   self._gradOutputs[step] = self._gradOutputs[step] or _gradOutput.new()
+   self._gradOutputs[step]:resizeAs(_gradOutput)
+   self._gradOutputs[step]:add(_gradOutput, gradOutput)
    gradOutput = self._gradOutputs[step]
 
    local inputTable = self:getHiddenState(step-1)
@@ -135,7 +137,6 @@ function RecLSTM:_updateGradInput(input, gradOutput)
 
    local gradInputTable = recurrentModule:updateGradInput(inputTable, {gradOutput, gradCell})
 
-   local _ = require 'moses'
    self:setGradHiddenState(step-1, _.slice(gradInputTable, 2, 3))
 
    return gradInputTable[1]

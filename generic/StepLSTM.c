@@ -19,8 +19,8 @@ static int nn_(StepLSTM_updateOutput)(lua_State *L) {
   if (THTensor_(size)(cur_x, 1) != inputsize)
     return LUA_HANDLE_ERROR_STR(L, "expected input[1]:size(2) == inputsize");
 
-  THTensor *buffer = THTensor_(newWithTensor)(bias);
-  THTensor_(resize2d)(buffer, 1, 4 * hiddensize);
+  THLongStorage* size = THLongStorage_newWithSize2(1, 4 * hiddensize);
+  THTensor *buffer = THTensor_(newView)(bias, size);
   buffer->stride[0] = 0;
   buffer->size[0] = batchsize;
 
@@ -61,6 +61,7 @@ static int nn_(StepLSTM_updateOutput)(lua_State *L) {
   THTensor_(free)(forget_gate);
   THTensor_(free)(output_gate);
   THTensor_(free)(input_transform);
+  THLongStorage_free(size);
 
   if (lua_gettop(L) > 11) // implements LSTMP (P stands for projection layer)
   {

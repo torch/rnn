@@ -509,7 +509,7 @@ function rnnbigtest.LSTM()
          lstm:zeroGradParameters()
          lstm:backward(input, gradOutput)
       end
-      lstm.testtime = t:time().real/10
+      lstm.testtime = t:time().real/nloop
    end
 
    for i,name in ipairs{'fast','step','luarec','rec', 'luaseq', 'seq'} do
