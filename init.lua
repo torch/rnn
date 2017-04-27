@@ -119,7 +119,6 @@ require('rnn.Recursor')
 require('rnn.Recurrence')
 require('rnn.LinearRNN')
 require('rnn.LookupRNN')
-require('rnn.LSTM')
 require('rnn.RecLSTM')
 require('rnn.GRU')
 require('rnn.Mufuru')
@@ -146,8 +145,10 @@ require('rnn.RepeaterCriterion')
 require('rnn.MaskZeroCriterion')
 
 -- deprecated modules
+require('rnn.LSTM')
 require('rnn.FastLSTM')
 require('rnn.Recurrent')
+require('rnn.SeqLSTMP')
 
 -- prevent likely name conflicts
 nn.rnn = rnn

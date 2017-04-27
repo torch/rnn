@@ -24,7 +24,7 @@ SET(luasrc
   GRU.lua
   LinearNoBias.lua
   LookupTableMaskZero.lua
-  LSTM.lua
+  deprecated/LSTM.lua
   MaskZero.lua
   MaskZeroCriterion.lua
   Module.lua
@@ -42,7 +42,7 @@ SET(luasrc
   SeqBRNN.lua
   SeqGRU.lua
   SeqLSTM.lua
-  SeqLSTMP.lua
+  deprecated/SeqLSTMP.lua
   SeqReverseSequence.lua
   Sequencer.lua
   SequencerCriterion.lua

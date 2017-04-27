@@ -5,11 +5,10 @@ You can use it to build RNNs, LSTMs, GRUs, BRNNs, BLSTMs, and so forth and so on
 This library includes documentation for the following objects:
 
 Modules that consider successive calls to `forward` as different time-steps in a sequence :
- * [AbstractRecurrent](#rnn.AbstractRecurrent) : an abstract class inherited by Recurrent and LSTM;
+ * [AbstractRecurrent](#rnn.AbstractRecurrent) : an abstract class inherited by `Recurrence` and `RecLSTM`;
  * [LookupRNN](#rnn.LookupRNN): implements a simple RNN where the input layer is a `LookupTable`;
  * [LinearRNN](#rnn.LinearRNN): implements a simple RNN where the input layer is a `Linear`;
- * [LSTM](#rnn.LSTM) : a vanilla Long-Short Term Memory module (uses peephole connections);
-   * [RecLSTM](#rnn.RecLSTM) : a faster LSTM (based on `SeqLSTM`) that doesn't use peephole connections;
+ * [RecLSTM](#rnn.RecLSTM) : a faster LSTM (based on `SeqLSTM`) that doesn't use peephole connections;
  * [GRU](#rnn.GRU) : Gated Recurrent Units module;
  * [Recursor](#rnn.Recursor) : decorates a module to make it conform to the [AbstractRecurrent](#rnn.AbstractRecurrent) interface;
  * [Recurrence](#rnn.Recurrence) : decorates a module that outputs `output(t)` given `{input(t), output(t-1)}`;
@@ -19,13 +18,12 @@ Modules that consider successive calls to `forward` as different time-steps in a
 Modules that `forward` entire sequences through a decorated `AbstractRecurrent` instance :
  * [AbstractSequencer](#rnn.AbstractSequencer) : an abstract class inherited by Sequencer, Repeater, RecurrentAttention, etc.;
  * [Sequencer](#rnn.Sequencer) : applies an encapsulated module to all elements in an input sequence  (Tensor or Table);
- * [SeqLSTM](#rnn.SeqLSTM) : a very fast version of `nn.Sequencer(nn.FastLSTM)` where the `input` and `output` are tensors;
-   * [SeqLSTMP](#rnn.SeqLSTMP) : `SeqLSTM` with a projection layer;
+ * [SeqLSTM](#rnn.SeqLSTM) : a faster version of `nn.Sequencer(nn.RecLSTM)` where the `input` and `output` are tensors;
  * [SeqGRU](#rnn.SeqGRU) : a very fast version of `nn.Sequencer(nn.GRU)` where the `input` and `output` are tensors;
  * [SeqBRNN](#rnn.SeqBRNN) : Bidirectional RNN based on SeqLSTM;
  * [BiSequencer](#rnn.BiSequencer) : used for implementing Bidirectional RNNs and LSTMs;
  * [BiSequencerLM](#rnn.BiSequencerLM) : used for implementing Bidirectional RNNs and LSTMs for language models;
- * [Repeater](#rnn.Repeater) : repeatedly applies the same input to an AbstractRecurrent instance;
+ * [Repeater](#rnn.Repeater) : repeatedly applies the same input to an `AbstractRecurrent` instance;
  * [RecurrentAttention](#rnn.RecurrentAttention) : a generalized attention model for [REINFORCE modules](https://github.com/nicholas-leonard/dpnn#nn.Reinforce);
 
 Miscellaneous modules and criterions :
@@ -159,7 +157,7 @@ If that doesn't fix it, open and issue on github.
 
 <a name='rnn.AbstractRecurrent'></a>
 ## AbstractRecurrent ##
-An abstract class inherited by [Recurrent](#rnn.Recurrent), [LSTM](#rnn.LSTM) and [GRU](#rnn.GRU).
+An abstract class inherited by [Recurrent](#rnn.Recurrent), [RecLSTM](#rnn.RecLSTM) and [GRU](#rnn.GRU).
 The constructor takes a single argument :
 ```lua
 rnn = nn.AbstractRecurrent([rho])
@@ -277,6 +275,34 @@ only the previous step is remembered. This is very efficient memory-wise,
 such that evaluation can be performed using potentially infinite-length
 sequence.
 
+<a name='rnn.Recurrent.Sequencer'></a>
+<a name='rnn.AbstractRecurrent.Sequencer'></a>
+### Decorate it with a Sequencer ###
+
+Note that any `AbstractRecurrent` instance can be decorated with a [Sequencer](#rnn.Sequencer)
+such that an entire sequence (a table or tensor) can be presented with a single `forward/backward` call.
+This is actually the recommended approach as it allows RNNs to be stacked and makes the
+RNN conform to the Module interface.
+Each call to `forward` can be followed by its own immediate call to `backward` as each `input` to the
+model is an entire sequence of size `seqlen x batchsize [x inputsize]`.
+
+```lua
+seq = nn.Sequencer(module)
+```
+
+The [simple-sequencer-network.lua](examples/simple-sequencer-network.lua) training script
+is equivalent to the [simple-recurrent-network.lua](examples/simple-recurrent-network.lua)
+script.
+The difference is that the former decorates the RNN with a `Sequencer` which takes
+a table of `inputs` and `gradOutputs` (the sequence for that batch).
+This lets the `Sequencer` handle the looping over the sequence.
+
+You should only think about using the `AbstractRecurrent` modules without
+a `Sequencer` if you intend to use it for real-time prediction.
+
+Other decorators can be used such as the [Repeater](#rnn.Repeater) or [RecurrentAttention](#rnn.RecurrentAttention).
+The `Sequencer` is only the most common one.
+
 <a name='rnn.LookupRNN'></a>
 ## LookupRNN
 
@@ -358,67 +384,22 @@ nn.Recurrence(
 
 Combining the input and recurrent layer into a single `Linear` module makes it quite efficient.
 
-<a name='rnn.LSTM'></a>
-## LSTM ##
+<a name='rnn.RecLSTM'></a>
+## RecLSTM ##
+
 References :
  * A. [Speech Recognition with Deep Recurrent Neural Networks](http://arxiv.org/pdf/1303.5778v1.pdf)
  * B. [Long-Short Term Memory](http://web.eecs.utk.edu/~itamar/courses/ECE-692/Bobby_paper1.pdf)
  * C. [LSTM: A Search Space Odyssey](http://arxiv.org/pdf/1503.04069v1.pdf)
  * D. [nngraph LSTM implementation on github](https://github.com/wojzaremba/lstm)
 
-This is an implementation of a vanilla Long-Short Term Memory module.
-We used Ref. A's LSTM as a blueprint for this module as it was the most concise.
-Yet it is also the vanilla LSTM described in Ref. C.
+ ![LSTM](doc/image/LSTM.png)
 
-The `nn.LSTM(inputSize, outputSize, [rho])` constructor takes 3 arguments:
- * `inputSize` : a number specifying the size of the input;
- * `outputSize` : a number specifying the size of the output;
- * `rho` : the maximum amount of backpropagation steps to take back in time. Limits the number of previous steps kept in memory. Defaults to 9999.
-
-![LSTM](doc/image/LSTM.png)
-
-The actual implementation corresponds to the following algorithm:
-```lua
-i[t] = σ(W[x->i]x[t] + W[h->i]h[t−1] + W[c->i]c[t−1] + b[1->i])      (1)
-f[t] = σ(W[x->f]x[t] + W[h->f]h[t−1] + W[c->f]c[t−1] + b[1->f])      (2)
-z[t] = tanh(W[x->c]x[t] + W[h->c]h[t−1] + b[1->c])                   (3)
-c[t] = f[t]c[t−1] + i[t]z[t]                                         (4)
-o[t] = σ(W[x->o]x[t] + W[h->o]h[t−1] + W[c->o]c[t] + b[1->o])        (5)
-h[t] = o[t]tanh(c[t])                                                (6)
-```
-where `W[s->q]` is the weight matrix from `s` to `q`, `t` indexes the time-step,
-`b[1->q]` are the biases leading into `q`, `σ()` is `Sigmoid`, `x[t]` is the input,
-`i[t]` is the input gate (eq. 1), `f[t]` is the forget gate (eq. 2),
-`z[t]` is the input to the cell (which we call the hidden) (eq. 3),
-`c[t]` is the cell (eq. 4), `o[t]` is the output gate (eq. 5),
-and `h[t]` is the output of this module (eq. 6). Also note that the
-weight matrices from cell to gate vectors are diagonal `W[c->s]`, where `s`
-is `i`,`f`, or `o`.
-
-As you can see, unlike [Recurrent](#rnn.Recurrent), this
-implementation isn't generic enough that it can take arbitrary component Module
-definitions at construction. However, the LSTM module can easily be adapted
-through inheritance by overriding the different factory methods :
-  * `buildGate` : builds generic gate that is used to implement the input, forget and output gates;
-  * `buildInputGate` : builds the input gate (eq. 1). Currently calls `buildGate`;
-  * `buildForgetGate` : builds the forget gate (eq. 2). Currently calls `buildGate`;
-  * `buildHidden` : builds the hidden (eq. 3);
-  * `buildCell` : builds the cell (eq. 4);
-  * `buildOutputGate` : builds the output gate (eq. 5). Currently calls `buildGate`;
-  * `buildModel` : builds the actual LSTM model which is used internally (eq. 6).
-
-Note that we recommend decorating the `LSTM` with a `Sequencer`
-(refer to [this](#rnn.Recurrent.Sequencer) for details).
-
-<a name='rnn.RecLSTM'></a>
-## RecLSTM ##
-
-A faster version of the [LSTM](#rnn.LSTM) based on [SeqLSTM](#rnn.SeqLSTM).
 Internally, `RecLSTM` uses a single module [StepLSTM](#rnn.StepLSTM), which is cloned (with shared parameters) for each time-step.
 The speedup is obtained by computing every time-step using a single module.
 This also makes the model memory efficient.
 
-Note that `RecLSTM` does not use peephole connections between cell and gates. The algorithm from `LSTM` changes as follows:
+The algorithm for `RecLSTM` is as follows:
 ```lua
 i[t] = σ(W[x->i]x[t] + W[h->i]h[t−1] + b[1->i])                      (1)
 f[t] = σ(W[x->f]x[t] + W[h->f]h[t−1] + b[1->f])                      (2)
@@ -427,7 +408,10 @@ c[t] = f[t]c[t−1] + i[t]z[t]                                         (4)
 o[t] = σ(W[x->o]x[t] + W[h->o]h[t−1] + b[1->o])                      (5)
 h[t] = o[t]tanh(c[t])                                                (6)
 ```
-i.e. omitting the summands `W[c->i]c[t−1]` (eq. 1), `W[c->f]c[t−1]` (eq. 2), and `W[c->o]c[t]` (eq. 5).
+
+Note that we recommend decorating the `RecLSTM` with a `Sequencer`
+(refer to [this](#rnn.AbstractRecurrent.Sequencer) for details).
+Also note that `RecLSTM` does not use peephole connections between cell and gates.
 
 <a name='rnn.StepLSTM'></a>
 ### StepLSTM ###
@@ -470,6 +454,13 @@ Whereas the `input` in `RecLSTM:forward(input)` is a single time-step.
 Use `RecLSTM` when the full sequence of `input` time-steps aren't known in advance.
 For example, in a attention model, the next location to focus on depends on the previous recursion and location.
 
+### LSTMP ###
+
+Note that by calling `nn.RecLSTM(inputsize, hiddensize, outputsize)`
+or `nn.StepLSTM(inputsize, hiddensize, outputsize)` (where both `hiddensize` and `outputsize` are numbers)
+results in the creation of an [LSTMP](#rnn.LSTMP) instead of an LSTM.
+An LSTMP is an LSTM with a projection layer.
+
 <a name='rnn.GRU'></a>
 ## GRU ##
 
@@ -502,7 +493,7 @@ s[t] = (1-z[t])h[t] + z[t]s[t-1]                           (4)
 where `W[s->q]` is the weight matrix from `s` to `q`, `t` indexes the time-step, `b[1->q]` are the biases leading into `q`, `σ()` is `Sigmoid`, `x[t]` is the input and `s[t]` is the output of the module (eq. 4). Note that unlike the [LSTM](#rnn.LSTM), the GRU has no cells.
 
 The GRU was benchmark on `PennTreeBank` dataset using [recurrent-language-model.lua](examples/recurrent-language-model.lua) script.
-It slightly outperfomed `FastLSTM`, however, since LSTMs have more parameters than GRUs,
+It slightly outperfomed [FastLSTM](https://github.com/torch/rnn/blob/master/deprecated/README.md#rnn.FastLSTM) (deprecated), however, since LSTMs have more parameters than GRUs,
 the dataset larger than `PennTreeBank` might change the performance result.
 Don't be too hasty to judge on which one is the better of the two (see Ref. C and D).
 
@@ -588,7 +579,7 @@ where `p[t][j]` is the weightings for operation `j` at time step `t`, and `sum` 
 
 This module decorates a `module` to be used within an `AbstractSequencer` instance.
 It does this by making the decorated module conform to the `AbstractRecurrent` interface,
-which like the `LSTM` and `Recurrent` classes, this class inherits.
+which like the `RecLSTM` and `Recurrence` classes, this class inherits.
 
 ```lua
 rec = nn.Recursor(module[, rho])
@@ -647,7 +638,7 @@ lstm = nn.Sequencer(
    )
 ```
 
-`AbstractRecurrent` instances like `Recursor`, `Recurrent` and `LSTM` are
+`AbstractRecurrent` instances like `Recursor`, `RecLSTM` and `Recurrence` are
 expcted to manage time-steps internally. Non-`AbstractRecurrent` instances
 can be wrapped by a `Recursor` to have the same behavior.
 
@@ -679,17 +670,15 @@ A extremely general container for implementing pretty much any type of recurrenc
 rnn = nn.Recurrence(recurrentModule, outputSize, nInputDim, [rho])
 ```
 
-Unlike [Recurrent](#rnn.Recurrent), this module doesn't manage a separate
-modules like `inputModule`, `startModule`, `mergeModule` and the like.
-Instead, it only manages a single `recurrentModule`, which should
+`Recurrence` manages a single `recurrentModule`, which should
 output a Tensor or table : `output(t)`
 given an input table : `{input(t), output(t-1)}`.
 Using a mix of `Recursor` (say, via `Sequencer`) with `Recurrence`, one can implement
 pretty much any type of recurrent neural network, including LSTMs and RNNs.
 
 For the first step, the `Recurrence` forwards a Tensor (or table thereof)
-of zeros through the recurrent layer (like LSTM, unlike Recurrent).
-So it needs to know the `outputSize`, which is either a number or
+of zeros through the recurrent layer.
+As such, `Recurrence` needs to know the `outputSize`, which is either a number or
 `torch.LongStorage`, or table thereof. The batch dimension should be
 excluded from the `outputSize`. Instead, the size of the batch dimension
 (i.e. number of samples) will be extrapolated from the `input` using
@@ -725,10 +714,6 @@ rnn = nn.Sequencer(
 )
 ```
 
-Note : We could very well reimplement the `LSTM` module using the
-newer `Recursor` and `Recurrent` modules, but that would mean
-breaking backwards compatibility for existing models saved on disk.
-
 <a name='rnn.NormStabilizer'></a>
 ## NormStabilizer ##
 
@@ -755,9 +740,9 @@ This module should be added between RNNs (or LSTMs or GRUs) to provide better re
 For example :
 ```lua
 local stepmodule = nn.Sequential()
-   :add(nn.FastLSTM(10,10))
+   :add(nn.RecLSTM(10,10))
    :add(nn.NormStabilizer())
-   :add(nn.FastLSTM(10,10))
+   :add(nn.RecLSTM(10,10))
    :add(nn.NormStabilizer())
 local rnn = nn.Sequencer(stepmodule)
 ```
@@ -887,13 +872,13 @@ Calls the decorated AbstractRecurrent module's `forget` method.
 <a name='rnn.SeqLSTM'></a>
 ## SeqLSTM ##
 
-This module is a faster version of `nn.Sequencer(nn.FastLSTM(inputsize, outputsize))` :
+This module is a faster version of `nn.Sequencer(nn.RecLSTM(inputsize, outputsize))` :
 
 ```lua
 seqlstm = nn.SeqLSTM(inputsize, outputsize)
 ```
 
-Each time-step is computed as follows (same as [FastLSTM](#rnn.FastLSTM)):
+Each time-step is computed as follows (same as [RecLSTM](#rnn.RecLSTM)):
 
 ```lua
 i[t] = σ(W[x->i]x[t] + W[h->i]h[t−1] + b[1->i])                      (1)
@@ -916,47 +901,46 @@ output = seqlstm:forward(input)
 gradInput = seqlstm:backward(input, gradOutput)
 ```
 
-Note that if you prefer to transpose the first two dimension (i.e. `batchsize x seqlen` instead of the default `seqlen x batchsize`)
+Note that if you prefer to transpose the first two dimension
+(that is, `batchsize x seqlen` instead of the default `seqlen x batchsize`)
 you can set `seqlstm.batchfirst = true` following initialization.
 
 For variable length sequences, set `seqlstm.maskzero = true`.
-This is equivalent to calling `maskZero(1)` on a `FastLSTM` wrapped by a `Sequencer`:
+This is equivalent to calling `RecLSTM:maskZero()` where the `RecLSTM` is wrapped by a `Sequencer`:
 ```lua
-fastlstm = nn.FastLSTM(inputsize, outputsize)
-fastlstm:maskZero(1)
-seqfastlstm = nn.Sequencer(fastlstm)
+reclstm = nn.RecLSTM(inputsize, outputsize)
+reclstm:maskZero(1)
+seqlstm = nn.Sequencer(reclstm)
 ```
 
 For `maskzero = true`, input sequences are expected to be seperated by tensor of zeros for a time step.
 
-The `seqlstm:toFastLSTM()` method generates a [FastLSTM](#rnn.FastLSTM) instance initialized with the parameters
-of the `seqlstm` instance. Note however that the resulting parameters will not be shared (nor can they ever be).
 
-Like the `FastLSTM`, the `SeqLSTM` does not use peephole connections between cell and gates (see [FastLSTM](#rnn.FastLSTM) for details).
+Like the `RecLSTM`, the `SeqLSTM` does not use peephole connections between cell and gates (see [RecLSTM](#rnn.RecLSTM) for details).
 
 Like the `Sequencer`, the `SeqLSTM` provides a [remember](rnn.Sequencer.remember) method.
 
-Note that a `SeqLSTM` cannot replace `FastLSTM` in code that decorates it with a
-`AbstractSequencer` or `Recursor` as this would be equivalent to `Sequencer(Sequencer(FastLSTM))`.
+Note that a `SeqLSTM` cannot replace `RecLSTM` in code that decorates it with a
+`AbstractSequencer` or `Recursor` as this would be equivalent to `nn.Sequencer(nn.Sequencer(nn.RecLSTM))`.
 You have been warned.
 
-<a name='rnn.SeqLSTMP'></a>
-## SeqLSTMP ##
+<a name='rnn.LSTMP'></a>
+### LSTMP ###
 References:
  * A. [LSTM RNN Architectures for Large Scale Acoustic Modeling](http://static.googleusercontent.com/media/research.google.com/en//pubs/archive/43905.pdf)
  * B. [Exploring the Limits of Language Modeling](https://arxiv.org/pdf/1602.02410v2.pdf)
 
 ```lua
-lstmp = nn.SeqLSTMP(inputsize, hiddensize, outputsize)
+lstmp = nn.SeqLSTM(inputsize, hiddensize, outputsize)
 ```
 
-The `SeqLSTMP` is a subclass of [SeqLSTM](#rnn.SeqLSTM).
-It differs in that after computing the hidden state `h[t]` (eq. 6), it is
+The `SeqLSTM` can implement an LSTM with a *projection* layer (LSTM*P*) when `hiddensize` and `outputsize` are provided.
+An LSTMP differs from an LSTM in that after computing the hidden state `h[t]` (eq. 6), it is
 projected onto `r[t]` using a simple linear transform (eq. 7).
 The computation of the gates also uses the previous such projection `r[t-1]` (eq. 1, 2, 3, 5).
-This differs from `SeqLSTM` which uses `h[t-1]` instead of `r[t-1]`.
+This differs from an LSTM which uses `h[t-1]` instead of `r[t-1]`.
 
-The computation of a time-step outlined in `SeqLSTM` is replaced with the following:
+The computation of a time-step outlined above for the LSTM is replaced with the following for an LSTMP:
 ```lua
 i[t] = σ(W[x->i]x[t] + W[r->i]r[t−1] + b[1->i])                      (1)
 f[t] = σ(W[x->f]x[t] + W[r->f]r[t−1] + b[1->f])                      (2)
@@ -968,9 +952,9 @@ r[t] = W[h->r]h[t]                                                   (7)
 ```
 
 The algorithm is outlined in ref. A and benchmarked with state of the art results on the Google billion words dataset in ref. B.
-`SeqLSTMP` can be used with an `hiddensize >> outputsize` such that the effective size of the memory cells `c[t]`
+An LSTMP can be used with an `hiddensize >> outputsize` such that the effective size of the memory cells `c[t]`
 and gates `i[t]`, `f[t]` and `o[t]` can be much larger than the actual input `x[t]` and output `r[t]`.
-For fixed `inputsize` and `outputsize`, the `SeqLSTMP` will be able to remember much more information than the `SeqLSTM`.
+For fixed `inputsize` and `outputsize`, the LSTMP will be able to remember much more information than an LSTM.
 
 <a name='rnn.SeqGRU'></a>
 ## SeqGRU ##
