@@ -46,7 +46,7 @@ function AbstractRecurrent:trimZero(nInputDim)
    if torch.typename(self)=='nn.GRU' and self.p ~= 0 then
       assert(self.mono, "TrimZero for BGRU needs `mono` option.")
    end
-   local stepmodule = nn.TrimZero(stepmodule, nInputDim, true)
+   local stepmodule = nn.TrimZero(self.modules[1], nInputDim, true)
    self.sharedClones = {stepmodule}
    self.modules[1] = stepmodule
    return self
