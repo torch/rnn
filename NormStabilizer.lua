@@ -17,7 +17,7 @@ function NS:_accGradParameters(input, gradOutput, scale)
    -- No parameters to update
 end
 
-function NS:updateOutput(input)
+function NS:_updateOutput(input)
    assert(input:dim() == 2)
    local output
    if self.train ~= false then
@@ -31,15 +31,7 @@ function NS:updateOutput(input)
       output = self.modules[1]:updateOutput(input)
    end
 
-   self.outputs[self.step] = output
-
-   self.output = output
-   self.step = self.step + 1
-   self.gradPrevOutput = nil
-   self.updateGradInputStep = nil
-   self.accGradParametersStep = nil
-
-   return self.output
+   return output
 end
 
 -- returns norm-stabilizer loss as defined in ref. A

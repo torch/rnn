@@ -150,7 +150,7 @@ function GRU:setHiddenState(step, hiddenState)
 end
 
 ------------------------- forward backward -----------------------------
-function GRU:updateOutput(input)
+function GRU:_updateOutput(input)
    local prevOutput = self:getHiddenState(self.step-1, input)
 
    -- output(t) = gru{input(t), output(t-1)}
@@ -164,16 +164,7 @@ function GRU:updateOutput(input)
       output = self.modules[1]:updateOutput{input, prevOutput}
    end
 
-   self.outputs[self.step] = output
-
-   self.output = output
-
-   self.step = self.step + 1
-   self.gradPrevOutput = nil
-   self.updateGradInputStep = nil
-   self.accGradParametersStep = nil
-   -- note that we don't return the cell, just the output
-   return self.output
+   return output
 end
 
 

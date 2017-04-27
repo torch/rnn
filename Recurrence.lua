@@ -102,7 +102,7 @@ function Recurrence:setHiddenState(step, hiddenState)
    end
 end
 
-function Recurrence:updateOutput(input)
+function Recurrence:_updateOutput(input)
    -- output(t-1)
    local prevOutput = self:getHiddenState(self.step-1, input)[1]
 
@@ -117,16 +117,7 @@ function Recurrence:updateOutput(input)
       output = self.modules[1]:updateOutput{input, prevOutput}
    end
 
-   self.outputs[self.step] = output
-
-   self.output = output
-
-   self.step = self.step + 1
-   self.gradPrevOutput = nil
-   self.updateGradInputStep = nil
-   self.accGradParametersStep = nil
-
-   return self.output
+   return output
 end
 
 function Recurrence:getGradHiddenState(step)

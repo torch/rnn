@@ -9,7 +9,7 @@ function AbstractRecurrent:__init(stepmodule)
    parent.__init(self)
 
    assert(torch.isTypeOf(stepmodule, 'nn.Module'), torch.type(self).." expecting nn.Module instance at arg 1")
-   self.rho = 99999 --the maximum number of time steps to BPTT
+   self.seqlen = 99999 --the maximum number of time steps to BPTT
 
    self.outputs = {}
    self.gradInputs = {}
@@ -52,6 +52,20 @@ function AbstractRecurrent:trimZero(nInputDim)
    return self
 end
 
+function AbstractRecurrent:updateOutput(input)
+   -- feed-forward for one time-step
+   self.output = self:_updateOutput(input)
+
+   self.outputs[self.step] = self.output
+
+   self.step = self.step + 1
+   self.gradPrevOutput = nil
+   self.updateGradInputStep = nil
+   self.accGradParametersStep = nil
+
+   return self.output
+end
+
 function AbstractRecurrent:updateGradInput(input, gradOutput)
    -- updateGradInput should be called in reverse order of time
    self.updateGradInputStep = self.updateGradInputStep or self.step
@@ -84,16 +98,16 @@ function AbstractRecurrent:recycle(offset)
    local _ = require 'moses'
    self.nSharedClone = self.nSharedClone or _.size(self.sharedClones)
 
-   local rho = math.max(self.rho + 1, self.nSharedClone)
+   local seqlen = math.max(self.seqlen + 1, self.nSharedClone)
    if self.sharedClones[self.step] == nil then
-      self.sharedClones[self.step] = self.sharedClones[self.step-rho]
-      self.sharedClones[self.step-rho] = nil
-      self._gradOutputs[self.step] = self._gradOutputs[self.step-rho]
-      self._gradOutputs[self.step-rho] = nil
+      self.sharedClones[self.step] = self.sharedClones[self.step-seqlen]
+      self.sharedClones[self.step-seqlen] = nil
+      self._gradOutputs[self.step] = self._gradOutputs[self.step-seqlen]
+      self._gradOutputs[self.step-seqlen] = nil
    end
 
-   self.outputs[self.step-rho-1] = nil
-   self.gradInputs[self.step-rho-1] = nil
+   self.outputs[self.step-seqlen-1] = nil
+   self.gradInputs[self.step-seqlen-1] = nil
 
    return self
 end
@@ -226,8 +240,8 @@ function AbstractRecurrent:setOutputStep(step)
    self.gradInput = self.gradInputs[step]
 end
 
-function AbstractRecurrent:maxBPTTstep(rho)
-   self.rho = rho
+function AbstractRecurrent:maxBPTTstep(seqlen)
+   self.seqlen = seqlen
 end
 
 -- get stored hidden state: h[t] where h[t] = f(x[t], h[t-1])
@@ -257,28 +271,6 @@ AbstractRecurrent.recursiveCopy = rnn.recursiveCopy
 AbstractRecurrent.recursiveAdd = rnn.recursiveAdd
 AbstractRecurrent.recursiveTensorEq = rnn.recursiveTensorEq
 AbstractRecurrent.recursiveNormal = rnn.recursiveNormal
-
-
-
-function AbstractRecurrent:backwardThroughTime(step, rho)
-   error"DEPRECATED Jan 8, 2016"
-end
-
-function AbstractRecurrent:updateGradInputThroughTime(step, rho)
-   error"DEPRECATED Jan 8, 2016"
-end
-
-function AbstractRecurrent:accGradParametersThroughTime(step, rho)
-   error"DEPRECATED Jan 8, 2016"
-end
-
-function AbstractRecurrent:accUpdateGradParametersThroughTime(lr, step, rho)
-   error"DEPRECATED Jan 8, 2016"
-end
-
-function AbstractRecurrent:backwardUpdateThroughTime(learningRate)
-   error"DEPRECATED Jan 8, 2016"
-end
 
 function AbstractRecurrent:__tostring__()
    if self.inputSize and self.outputSize then

@@ -41,7 +41,7 @@ function rnntest.RecLSTM_main()
 
    local gradInput = gradInputs[1]
 
-   local mlp2 -- this one will simulate rho = nStep
+   local mlp2 -- this one will simulate seqlen = nStep
    local inputs
    for step=1,nStep do
       -- iteratively build an LSTM out of non-recurrent components
@@ -152,7 +152,7 @@ function rnntest.GRU()
       gradInput = gru:backward(input[step], gradOutput[step], 1)
    end
 
-   local mlp2 -- this one will simulate rho = nStep
+   local mlp2 -- this one will simulate seqlen = nStep
    local inputs
    for step=1,nStep do
       -- iteratively build an GRU out of non-recurrent components
@@ -236,7 +236,7 @@ function rnntest.RecurrentAttention()
       locatorHiddenSize = 20,
       imageHiddenSize = 20,
       hiddenSize = 20,
-      rho = 5,
+      seqlen = 5,
       locatorStd = 0.1,
       inputSize = 28,
       nClass = 10,
@@ -276,11 +276,11 @@ function rnntest.RecurrentAttention()
    locator:add(nn.HardTanh()) -- bounds sample between -1 and 1
 
    -- model is a reinforcement learning agent
-   local rva = nn.RecurrentAttention(rnn:clone(), locator:clone(), opt.rho, {opt.hiddenSize})
+   local rva = nn.RecurrentAttention(rnn:clone(), locator:clone(), opt.seqlen, {opt.hiddenSize})
 
    local input = torch.randn(opt.batchSize,1,opt.inputSize,opt.inputSize)
    local gradOutput = {}
-   for step=1,opt.rho do
+   for step=1,opt.seqlen do
       table.insert(gradOutput, torch.randn(opt.batchSize, opt.hiddenSize))
    end
 
@@ -288,7 +288,7 @@ function rnntest.RecurrentAttention()
 
    local output = rva:forward(input)
 
-   mytester:assert(#output == opt.rho, "RecurrentAttention #output err")
+   mytester:assert(#output == opt.seqlen, "RecurrentAttention #output err")
 
    local reward = torch.randn(opt.batchSize)
    rva:reinforce(reward)
@@ -483,7 +483,7 @@ function rnntest.Sequencer_main()
          mytester:assertTensorEq(params7[i], params8[i], 0.0000001, "Sequencer "..torch.type(rnn7).." remember params err "..i)
       end
 
-      -- test in evaluation mode with remember and variable rho
+      -- test in evaluation mode with remember and variable seqlen
       local rnn7 = rnn:clone() -- a fresh copy (no hidden states)
       local params7 = rnn7:parameters()
       local params9 = rnn9:parameters() -- not a fresh copy
@@ -976,7 +976,7 @@ function rnntest.Sequencer_tensor()
          mytester:assertTensorEq(params7[i], params8[i], 0.0000001, "Sequencer "..torch.type(rnn7).." remember params err "..i)
       end
 
-      -- test in evaluation mode with remember and variable rho
+      -- test in evaluation mode with remember and variable seqlen
       local rnn7 = rnn:clone() -- a fresh copy (no hidden states)
       local params7 = rnn7:parameters()
       local params9 = rnn9:parameters() -- not a fresh copy
@@ -2356,10 +2356,10 @@ function rnntest.Recursor()
    local inputSize = 3
    local hiddenSize = 12
    local outputSize = 7
-   local rho = 5
+   local seqlen = 5
 
-   local inputs = torch.randn(rho, batchSize, inputSize)
-   local gradOutputs = torch.randn(rho, batchSize, outputSize)
+   local inputs = torch.randn(seqlen, batchSize, inputSize)
+   local gradOutputs = torch.randn(seqlen, batchSize, outputSize)
 
    -- USE CASE 1. Recursor(LSTM)
 
@@ -2369,18 +2369,18 @@ function rnntest.Recursor()
    re:zeroGradParameters()
    re2:zeroGradParameters()
 
-   local outputs = torch.Tensor(rho, batchSize, outputSize)
+   local outputs = torch.Tensor(seqlen, batchSize, outputSize)
    local outputs2 = outputs:clone()
-   local gradInputs = torch.Tensor(rho, batchSize, inputSize)
+   local gradInputs = torch.Tensor(seqlen, batchSize, inputSize)
 
-   for i=1,rho do
+   for i=1,seqlen do
       -- forward
       outputs[i] = re:forward(inputs[i])
       outputs2[i] = re2:forward(inputs[i])
    end
 
-   local gradInputs_2 = torch.Tensor(rho, batchSize, inputSize)
-   for i=rho,1,-1 do
+   local gradInputs_2 = torch.Tensor(seqlen, batchSize, inputSize)
+   for i=seqlen,1,-1 do
       -- backward
       gradInputs_2[i] = re2:backward(inputs[i], gradOutputs[i])
       gradInputs[i] = re:backward(inputs[i], gradOutputs[i])
@@ -2418,11 +2418,11 @@ function rnntest.Recursor()
    local outputs = seq:forward(inputs)
    local gradInputs = seq:backward(inputs, gradOutputs)
 
-   for i=1,rho do
+   for i=1,seqlen do
       outputs2[i] = re2:forward(inputs[i])
    end
 
-   for i=rho,1,-1 do
+   for i=seqlen,1,-1 do
       gradInputs_2[i] = re2:backward(inputs[i], gradOutputs[i])
    end
 
@@ -2450,13 +2450,13 @@ function rnntest.Recursor()
    re:zeroGradParameters()
    re2:zeroGradParameters()
 
-   for i=1,rho do
+   for i=1,seqlen do
       -- forward
       outputs = re:forward(inputs[i])
       outputs2 = re2:forward(inputs[i])
    end
 
-   for i=rho,1,-1 do
+   for i=seqlen,1,-1 do
       -- backward
       gradInputs_2[i] = re2:backward(inputs[i], gradOutputs[i])
    end
@@ -2464,7 +2464,7 @@ function rnntest.Recursor()
    re2:updateParameters(0.1)
 
    -- recursor requires reverse-time-step order during backward
-   for i=rho,1,-1 do
+   for i=seqlen,1,-1 do
       gradInputs[i] = re:backward(inputs[i], gradOutputs[i])
    end
 
@@ -2543,7 +2543,7 @@ function rnntest.Recurrence_nested()
 
    local batchSize = 4
    local hiddenSize = 2
-   local rho = 3
+   local seqlen = 3
 
    local lstm = nn.RecLSTM(hiddenSize,hiddenSize)
 
@@ -2558,7 +2558,7 @@ function rnntest.Recurrence_nested()
    local seq = nn.Sequencer(rnn)
 
    local inputs, gradOutputs = {}, {}
-   for i=1,rho do
+   for i=1,seqlen do
       inputs[i] = torch.randn(batchSize, hiddenSize)
       gradOutputs[i] = torch.randn(batchSize, hiddenSize)
    end
@@ -4280,7 +4280,7 @@ function rnntest.NormStabilizer()
    -- Make a simple RNN and training set to test gradients
    -- hyper-parameters
    local batchSize = 3
-   local rho = 2
+   local seqlen = 2
    local hiddenSize = 3
    local inputSize = 4
    local lr = 0.1
@@ -4302,7 +4302,7 @@ function rnntest.NormStabilizer()
    while iteration < 5 do
       -- generate a random data point
       local inputs, targets = {}, {}
-      for step=1,rho do
+      for step=1,seqlen do
          inputs[step] = torch.randn(batchSize, inputSize)
          targets[step] = torch.randn(batchSize, hiddenSize)
       end
@@ -4403,7 +4403,7 @@ function rnntest.NormStabilizer()
    local seq2 = nn.Sequencer(ns2)
 
    local inputs, gradOutputs = {}, {}
-   for step=1,rho do
+   for step=1,seqlen do
       inputs[step] = torch.randn(batchSize, inputSize)
       gradOutputs[step] = torch.randn(batchSize, inputSize)
    end
@@ -4413,7 +4413,7 @@ function rnntest.NormStabilizer()
    local gradInputs = seq:backward(inputs, gradOutputs)
    local gradInputs2 = seq2:backward(inputs, gradOutputs)
 
-   for step=1,rho do
+   for step=1,seqlen do
       mytester:assertTensorEq(outputs[step], outputs2[step], 0.0000001)
       mytester:assertTensorEq(gradInputs[step], gradInputs2[step], 0.0000001)
    end

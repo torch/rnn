@@ -4,7 +4,7 @@ require 'rnn'
 
 -- hyper-parameters
 batchSize = 8
-rho = 5 -- sequence length
+seqlen = 5 -- sequence length
 hiddenSize = 7
 nIndex = 10
 lr = 0.1
@@ -49,10 +49,10 @@ offsets = torch.LongTensor(offsets)
 -- training
 local iteration = 1
 while true do
-   -- 1. create a sequence of rho time-steps
+   -- 1. create a sequence of seqlen time-steps
 
    local inputs, targets = {}, {}
-   for step=1,rho do
+   for step=1,seqlen do
       -- a batch of inputs
       inputs[step] = sequence:index(1, offsets)
       -- incement indices

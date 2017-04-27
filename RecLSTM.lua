@@ -59,7 +59,7 @@ function RecLSTM:setHiddenState(step, hiddenState)
 end
 
 ------------------------- forward backward -----------------------------
-function RecLSTM:updateOutput(input)
+function RecLSTM:_updateOutput(input)
    local prevOutput, prevCell = unpack(self:getHiddenState(self.step-1, input))
 
    -- output(t), cell(t) = lstm{input(t), output(t-1), cell(t-1)}
@@ -73,18 +73,10 @@ function RecLSTM:updateOutput(input)
       output, cell = unpack(self.modules[1]:updateOutput{input, prevOutput, prevCell})
    end
 
-   self.outputs[self.step] = output
    self.cells[self.step] = cell
-
-   self.output = output
    self.cell = cell
-
-   self.step = self.step + 1
-   self.gradPrevOutput = nil
-   self.updateGradInputStep = nil
-   self.accGradParametersStep = nil
    -- note that we don't return the cell, just the output
-   return self.output
+   return output
 end
 
 function RecLSTM:getGradHiddenState(step)

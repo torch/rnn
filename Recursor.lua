@@ -6,7 +6,7 @@
 ------------------------------------------------------------------------
 local Recursor, parent = torch.class('nn.Recursor', 'nn.AbstractRecurrent')
 
-function Recursor:updateOutput(input)
+function Recursor:_updateOutput(input)
    local output
    if self.train ~= false then -- if self.train or self.train == nil then
       -- set/save the output states
@@ -17,12 +17,7 @@ function Recursor:updateOutput(input)
       output = self.modules[1]:updateOutput(input)
    end
 
-   self.outputs[self.step] = output
-   self.output = output
-   self.step = self.step + 1
-   self.updateGradInputStep = nil
-   self.accGradParametersStep = nil
-   return self.output
+   return output
 end
 
 function Recursor:_updateGradInput(input, gradOutput)
