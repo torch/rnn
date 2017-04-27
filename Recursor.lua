@@ -63,9 +63,9 @@ function Recursor:forget(offset)
    return self
 end
 
-function Recursor:maxBPTTstep(rho)
-   self.rho = rho
-   nn.Module.maxBPTTstep(self, rho)
+function Recursor:maxBPTTstep(seqlen)
+   self.seqlen = seqlen
+   nn.Module.maxBPTTstep(self, seqlen)
 end
 
 function Recursor:getHiddenState(...)
@@ -82,6 +82,10 @@ end
 
 function Recursor:setGradHiddenState(...)
    return self.modules[1]:setGradHiddenState(...)
+end
+
+function Recursor:setStartState(...)
+   return self.modules[1]:setStartState(...)
 end
 
 Recursor.__tostring__ = nn.Decorator.__tostring__

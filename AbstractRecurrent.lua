@@ -1,6 +1,4 @@
 local _ = require 'moses'
-
-assert(not nn.AbstractRecurrent, "update nnx package : luarocks install nnx")
 local AbstractRecurrent, parent = torch.class('nn.AbstractRecurrent', 'nn.Container')
 
 AbstractRecurrent.dpnn_stepclone = true
@@ -24,8 +22,7 @@ function AbstractRecurrent:__init(stepmodule)
 end
 
 function AbstractRecurrent:getStepModule(step)
-   local _ = require 'moses'
-   assert(step, "expecting step at arg 1")
+   step = step or 1
    local stepmodule = self.sharedClones[step]
    if not stepmodule then
       stepmodule = self.modules[1]:stepClone()
@@ -91,11 +88,7 @@ end
 
 -- goes hand in hand with the next method : forget()
 -- this methods brings the oldest memory to the current step
-function AbstractRecurrent:recycle(offset)
-   -- offset can be used to skip initialModule (if any)
-   offset = offset or 0
-
-   local _ = require 'moses'
+function AbstractRecurrent:recycle()
    self.nSharedClone = self.nSharedClone or _.size(self.sharedClones)
 
    local seqlen = math.max(self.seqlen + 1, self.nSharedClone)
@@ -123,11 +116,15 @@ function nn.AbstractRecurrent:clearState()
    return parent.clearState(self)
 end
 
+-- sets the starting hidden state at time t=0 (that is h[0])
+function AbstractRecurrent:setStartState(startState)
+   self.startState = startState
+end
+
 -- this method brings all the memory back to the start
 function AbstractRecurrent:forget()
    -- the stepmodule may contain an AbstractRecurrent instance (issue 107)
    parent.forget(self)
-   local _ = require 'moses'
 
     -- bring all states back to the start of the sequence buffers
    if self.train ~= false then

@@ -85,8 +85,8 @@ function rnntest.RecLSTM_main()
 
    gradParams = lstm.recursiveCopy(nil, gradParams)
    gradInput = gradInput:clone()
-   mytester:assert(lstm.prev_c0:sum() == 0, "prev_c0 error")
-   mytester:assert(lstm.prev_h0:sum() == 0, "prev_h0 error")
+   mytester:assert(lstm.zeroOutput:sum() == 0, "zeroOutput error")
+   mytester:assert(lstm.zeroCell:sum() == 0, "zeroCell error")
    lstm:forget()
    output = lstm.recursiveCopy(nil, output)
    local output3 = {}
@@ -3288,8 +3288,7 @@ function rnntest.encoderdecoder()
 
    --[[ Forward coupling: Copy encoder cell and output to decoder LSTM ]]--
    local function forwardConnect(encLSTM, decLSTM)
-      decLSTM.userPrevOutput = nn.rnn.recursiveCopy(decLSTM.userPrevOutput, encLSTM.outputs[opt.inputSeqLen])
-      decLSTM.userPrevCell = nn.rnn.recursiveCopy(decLSTM.userPrevCell, encLSTM.cells[opt.inputSeqLen])
+      decLSTM:setHiddenState(0, encLSTM:getHiddenState(opt.inputSeqLen))
    end
 
    --[[ Backward coupling: Copy decoder gradients to encoder LSTM ]]--
@@ -3301,7 +3300,7 @@ function rnntest.encoderdecoder()
    local enc = nn.Sequential()
    enc:add(nn.LookupTable(opt.vocabSz, opt.hiddenSz))
    enc:add(nn.SplitTable(1, 2)) -- works for both online and mini-batch mode
-   local encLSTM = nn.LSTM(opt.hiddenSz, opt.hiddenSz)
+   local encLSTM = nn.GRU(opt.hiddenSz, opt.hiddenSz)
    enc:add(nn.Sequencer(encLSTM))
    enc:add(nn.SelectTable(-1))
 
@@ -3309,7 +3308,7 @@ function rnntest.encoderdecoder()
    local dec = nn.Sequential()
    dec:add(nn.LookupTable(opt.vocabSz, opt.hiddenSz))
    dec:add(nn.SplitTable(1, 2)) -- works for both online and mini-batch mode
-   local decLSTM = nn.LSTM(opt.hiddenSz, opt.hiddenSz)
+   local decLSTM = nn.GRU(opt.hiddenSz, opt.hiddenSz)
    dec:add(nn.Sequencer(decLSTM))
    dec:add(nn.Sequencer(nn.Linear(opt.hiddenSz, opt.vocabSz)))
    dec:add(nn.Sequencer(nn.LogSoftMax()))
@@ -5172,6 +5171,7 @@ function rnntest.getHiddenState()
       lstm:zeroGradParameters()
       lstm2:zeroGradParameters()
       lstm:forget()
+      lstm:setStartState() -- empties start states
 
       for step=1,seqlen do
          lstm:forward(input[step])
@@ -5182,8 +5182,12 @@ function rnntest.getHiddenState()
                hs = hs[1][1]
                hs2 = hs2[1][1]
             end
-            for i=1,#hs do
-               mytester:assertTensorEq(hs[i], hs2[i], 0.0000001)
+            if torch.type(hs) == 'table' then
+               for i=1,#hs do
+                  mytester:assertTensorEq(hs[i], hs2[i], 0.0000001)
+               end
+            else
+               mytester:assertTensorEq(hs, hs2, 0.0000001)
             end
          else
             mytester:assertTensorEq(hs, hs2, 0.0000001)
@@ -5217,21 +5221,17 @@ function rnntest.getHiddenState()
       end
    end
 
-   local lstm = nn.LSTM(inputsize, outputsize)
+   local lstm = nn.RecLSTM(inputsize, outputsize)
    testHiddenState(lstm)
 
    local gru = nn.GRU(inputsize, outputsize)
    testHiddenState(gru)
 
    gru:forget()
+   gru:setStartState()
    testHiddenState(nn.Recursor(gru), false)
 
-   local rm = lstm.modules[1]:clone()
-
-   rm:insert(nn.FlattenTable(), 1)
-   local recurrence = nn.Recurrence(rm, {{outputsize}, {outputsize}}, 1)
-   local lstm = nn.Sequential():add(recurrence):add(nn.SelectTable(1))
-   testHiddenState(lstm, true)
+   testHiddenState(nn.LinearRNN(inputsize, outputsize), true)
 end
 
 

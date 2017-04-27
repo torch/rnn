@@ -445,6 +445,22 @@ function Module:maxBPTTstep(rho)
    end
 end
 
+function Module:setStartState(startState)
+   if self.modules then
+      if torch.type(startState) == 'table' then
+         for i, module in ipairs(self.modules) do
+            module:setStartState(startState[i])
+         end
+      else
+         -- empties the start states
+         assert(startState == nil, "Expecting table or nil for arg 1")
+         for i, module in ipairs(self.modules) do
+            module:setStartState()
+         end
+      end
+   end
+end
+
 function Module:getHiddenState(step)
    if self.modules then
       local hiddenState = {}

@@ -9,11 +9,11 @@ function RecLSTM:__init(inputsize, hiddensize, outputsize)
    self.hiddensize = self.modules[1].hiddensize
    self.outputsize = self.modules[1].outputsize
 
-   self.prev_h0 = torch.Tensor()
-   self.prev_c0 = torch.Tensor()
-
    self.cells = {}
    self.gradCells = {}
+
+   self.zeroOutput = torch.Tensor()
+   self.zeroCell = torch.Tensor()
 end
 
 function RecLSTM:maskZero()
@@ -23,39 +23,6 @@ function RecLSTM:maskZero()
    end
    self.modules[1].maskzero = true
    return self
-end
-
-function RecLSTM:getHiddenState(step, input)
-   step = step == nil and (self.step - 1) or (step < 0) and (self.step - step - 1) or step
-   local prevOutput, prevCell
-   if step == 0 then
-      prevOutput = self.userPrevOutput or self.outputs[step] or self.prev_h0
-      prevCell = self.userPrevCell or self.cells[step] or self.prev_c0
-      if input then
-         if input:dim() == 2 then
-            self.prev_h0:resize(input:size(1), self.outputsize):zero()
-            self.prev_c0:resize(input:size(1), self.hiddensize):zero()
-         else
-            self.prev_h0:resize(self.outputsize):zero()
-            self.prev_c0:resize(self.hiddensize):zero()
-         end
-      end
-   else
-      -- previous output and cell of this module
-      prevOutput = self.outputs[step]
-      prevCell = self.cells[step]
-   end
-   return {prevOutput, prevCell}
-end
-
-function RecLSTM:setHiddenState(step, hiddenState)
-   step = step == nil and (self.step - 1) or (step < 0) and (self.step - step - 1) or step
-   assert(torch.type(hiddenState) == 'table')
-   assert(#hiddenState == 2)
-
-   -- previous output of this module
-   self.outputs[step] = hiddenState[1]
-   self.cells[step] = hiddenState[2]
 end
 
 ------------------------- forward backward -----------------------------
@@ -79,32 +46,6 @@ function RecLSTM:_updateOutput(input)
    return output
 end
 
-function RecLSTM:getGradHiddenState(step)
-   self.gradOutputs = self.gradOutputs or {}
-   self.gradCells = self.gradCells or {}
-   local _step = self.updateGradInputStep or self.step
-   step = step == nil and (_step - 1) or (step < 0) and (_step - step - 1) or step
-   local gradOutput, gradCell
-   if step == self.step-1 then
-      gradOutput = self.userNextGradOutput or self.gradOutputs[step] or self.prev_h0
-      gradCell = self.userNextGradCell or self.gradCells[step] or self.prev_c0
-   else
-      gradOutput = self.gradOutputs[step]
-      gradCell = self.gradCells[step]
-   end
-   return {gradOutput, gradCell}
-end
-
-function RecLSTM:setGradHiddenState(step, gradHiddenState)
-   local _step = self.updateGradInputStep or self.step
-   step = step == nil and (_step - 1) or (step < 0) and (_step - step - 1) or step
-   assert(torch.type(gradHiddenState) == 'table')
-   assert(#gradHiddenState == 2)
-
-   self.gradOutputs[step] = gradHiddenState[1]
-   self.gradCells[step] = gradHiddenState[2]
-end
-
 function RecLSTM:_updateGradInput(input, gradOutput)
    assert(self.step > 1, "expecting at least one updateOutput")
    local step = self.updateGradInputStep - 1
@@ -114,7 +55,7 @@ function RecLSTM:_updateGradInput(input, gradOutput)
    local stepmodule = self:getStepModule(step)
 
    -- backward propagate through this step
-   local gradHiddenState = self:getGradHiddenState(step)
+   local gradHiddenState = self:getGradHiddenState(step, input)
    local _gradOutput, gradCell = gradHiddenState[1], gradHiddenState[2]
    assert(_gradOutput and gradCell)
 
@@ -149,12 +90,9 @@ function RecLSTM:_accGradParameters(input, gradOutput, scale)
 end
 
 function RecLSTM:clearState()
-   self.prev_c0:set()
-   self.prev_h0:set()
-   if self.userPrevOutput then self.userPrevOutput:set() end
-   if self.userPrevCell then self.userPrevCell:set() end
-   if self.userGradPrevOutput then self.userGradPrevOutput:set() end
-   if self.userGradPrevCell then self.userGradPrevCell:set() end
+   self.startState = nil
+   self.zeroCell:set()
+   self.zeroOutput:set()
    return parent.clearState(self)
 end
 
@@ -164,4 +102,87 @@ function RecLSTM:type(type, ...)
       self:clearState()
    end
    return parent.type(self, type, ...)
+end
+
+
+function RecLSTM:initZeroTensor(input)
+   if input then
+      if input:dim() == 2 then
+         self.zeroOutput:resize(input:size(1), self.outputsize):zero()
+         self.zeroCell:resize(input:size(1), self.hiddensize):zero()
+      else
+         self.zeroOutput:resize(self.outputsize):zero()
+         self.zeroCell:resize(self.hiddensize):zero()
+      end
+   end
+end
+
+function RecLSTM:getHiddenState(step, input)
+   step = step == nil and (self.step - 1) or (step < 0) and (self.step - step - 1) or step
+   local prevOutput, prevCell
+   if step == 0 then
+      if self.startState then
+         prevOutput, prevCell = self.startState[1], self.startState[2]
+         if input and input:dim() == 2 then
+            assert(prevOutput:size(2) == self.outputsize)
+            assert(prevCell:size(2) == self.hiddensize)
+            assert(prevOutput:size(1) == input:size(1))
+            assert(prevCell:size(1) == input:size(1))
+         end
+      else
+         prevOutput = self.zeroOutput
+         prevCell = self.zeroCell
+         self:initZeroTensor(input)
+      end
+   else
+      -- previous output and cell of this module
+      prevOutput = self.outputs[step]
+      prevCell = self.cells[step]
+   end
+   return {prevOutput, prevCell}
+end
+
+function RecLSTM:setHiddenState(step, hiddenState)
+   step = step == nil and (self.step - 1) or (step < 0) and (self.step - step - 1) or step
+   assert(torch.type(hiddenState) == 'table')
+   assert(#hiddenState == 2)
+
+   if step == 0 then
+      -- this hack bipasses the fact that Sequencer calls forget when remember is false
+      -- which makes it impossible to use self.outputs to set the h[0] (it is forgotten)
+      self:setStartState(hiddenState)
+   else
+      -- previous output of this module
+      self.outputs[step] = hiddenState[1]
+      self.cells[step] = hiddenState[2]
+   end
+end
+
+function RecLSTM:getGradHiddenState(step, input)
+   self.gradOutputs = self.gradOutputs or {}
+   self.gradCells = self.gradCells or {}
+   local _step = self.updateGradInputStep or self.step
+   step = step == nil and (_step - 1) or (step < 0) and (_step - step - 1) or step
+   local gradOutput, gradCell
+   if step == self.step-1 then
+      if self.startState and not (self.gradOutputs[step] and self.gradCells[input]) then
+         self:initZeroTensor(input)
+      end
+      gradOutput = self.gradOutputs[step] or self.zeroOutput
+      gradCell = self.gradCells[step] or self.zeroCell
+   else
+      gradOutput = self.gradOutputs[step]
+      gradCell = self.gradCells[step]
+   end
+   return {gradOutput, gradCell}
+end
+
+function RecLSTM:setGradHiddenState(step, gradHiddenState)
+   local _step = self.updateGradInputStep or self.step
+   step = step == nil and (_step - 1) or (step < 0) and (_step - step - 1) or step
+   assert(torch.type(gradHiddenState) == 'table')
+   assert(#gradHiddenState == 2)
+
+   self.gradOutputs[step] = gradHiddenState[1]
+   self.gradCells[step] = gradHiddenState[2]
 end
