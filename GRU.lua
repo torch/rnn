@@ -16,7 +16,6 @@
 local GRU, parent = torch.class('nn.GRU', 'nn.AbstractRecurrent')
 
 function GRU:__init(inputSize, outputSize, rho, p, mono)
-   parent.__init(self, rho or 9999)
    self.p = p or 0
    if p and p ~= 0 then
       assert(nn.Dropout(p,false,false,true).lazy, 'only work with Lazy Dropout!')
@@ -25,10 +24,8 @@ function GRU:__init(inputSize, outputSize, rho, p, mono)
    self.inputSize = inputSize
    self.outputSize = outputSize
    -- build the model
-   self.recurrentModule = self:buildModel()
-   -- make it work with nn.Container
-   self.modules[1] = self.recurrentModule
-   self.sharedClones[1] = self.recurrentModule
+   local stepmodule = self:buildModel()
+   parent.__init(self, stepmodule)
 
    -- for output(0), cell(0) and gradCell(T)
    self.zeroTensor = torch.Tensor()
@@ -160,11 +157,11 @@ function GRU:updateOutput(input)
    local output
    if self.train ~= false then
       self:recycle()
-      local recurrentModule = self:getStepModule(self.step)
+      local stepmodule = self:getStepModule(self.step)
       -- the actual forward propagation
-      output = recurrentModule:updateOutput{input, prevOutput}
+      output = stepmodule:updateOutput{input, prevOutput}
    else
-      output = self.recurrentModule:updateOutput{input, prevOutput}
+      output = self.modules[1]:updateOutput{input, prevOutput}
    end
 
    self.outputs[self.step] = output
@@ -201,7 +198,7 @@ function GRU:_updateGradInput(input, gradOutput)
    assert(step >= 1)
 
    -- set the output/gradOutput states of current Module
-   local recurrentModule = self:getStepModule(step)
+   local stepmodule = self:getStepModule(step)
 
    -- backward propagate through this step
    local _gradOutput = self:getGradHiddenState(step)
@@ -210,7 +207,7 @@ function GRU:_updateGradInput(input, gradOutput)
    nn.rnn.recursiveAdd(self._gradOutputs[step], gradOutput)
    gradOutput = self._gradOutputs[step]
 
-   local gradInputTable = recurrentModule:updateGradInput({input, self:getHiddenState(step-1)}, gradOutput)
+   local gradInputTable = stepmodule:updateGradInput({input, self:getHiddenState(step-1)}, gradOutput)
 
    self:setGradHiddenState(step-1, gradInputTable[2])
 
@@ -222,11 +219,11 @@ function GRU:_accGradParameters(input, gradOutput, scale)
    assert(step >= 1)
 
    -- set the output/gradOutput states of current Module
-   local recurrentModule = self:getStepModule(step)
+   local stepmodule = self:getStepModule(step)
 
    -- backward propagate through this step
    local gradOutput = self._gradOutputs[step] or self:getGradHiddenState(step)
-   recurrentModule:accGradParameters({input, self:getHiddenState(step-1)}, gradOutput, scale)
+   stepmodule:accGradParameters({input, self:getHiddenState(step-1)}, gradOutput, scale)
 end
 
 function GRU:__tostring__()

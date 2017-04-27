@@ -5,10 +5,11 @@ local AbstractRecurrent, parent = torch.class('nn.AbstractRecurrent', 'nn.Contai
 
 AbstractRecurrent.dpnn_stepclone = true
 
-function AbstractRecurrent:__init(rho)
+function AbstractRecurrent:__init(stepmodule)
    parent.__init(self)
 
-   self.rho = rho or 99999 --the maximum number of time steps to BPTT
+   assert(torch.isTypeOf(stepmodule, 'nn.Module'), torch.type(self).." expecting nn.Module instance at arg 1")
+   self.rho = 99999 --the maximum number of time steps to BPTT
 
    self.outputs = {}
    self.gradInputs = {}
@@ -18,27 +19,26 @@ function AbstractRecurrent:__init(rho)
    self.step = 1
 
    -- stores internal states of Modules at different time-steps
-   self.sharedClones = {}
-
-   self:reset()
+   self.modules[1] = stepmodule
+   self.sharedClones = {stepmodule}
 end
 
 function AbstractRecurrent:getStepModule(step)
    local _ = require 'moses'
    assert(step, "expecting step at arg 1")
-   local recurrentModule = self.sharedClones[step]
-   if not recurrentModule then
-      recurrentModule = self.recurrentModule:stepClone()
-      self.sharedClones[step] = recurrentModule
+   local stepmodule = self.sharedClones[step]
+   if not stepmodule then
+      stepmodule = self.modules[1]:stepClone()
+      self.sharedClones[step] = stepmodule
       self.nSharedClone = _.size(self.sharedClones)
    end
-   return recurrentModule
+   return stepmodule
 end
 
 function AbstractRecurrent:maskZero(nInputDim)
-   self.recurrentModule = nn.MaskZero(self.recurrentModule, nInputDim, true)
-   self.sharedClones = {self.recurrentModule}
-   self.modules[1] = self.recurrentModule
+   local stepmodule = nn.MaskZero(self.modules[1], nInputDim, true)
+   self.sharedClones = {stepmodule}
+   self.modules[1] = stepmodule
    return self
 end
 
@@ -46,9 +46,9 @@ function AbstractRecurrent:trimZero(nInputDim)
    if torch.typename(self)=='nn.GRU' and self.p ~= 0 then
       assert(self.mono, "TrimZero for BGRU needs `mono` option.")
    end
-   self.recurrentModule = nn.TrimZero(self.recurrentModule, nInputDim, true)
-   self.sharedClones = {self.recurrentModule}
-   self.modules[1] = self.recurrentModule
+   local stepmodule = nn.TrimZero(stepmodule, nInputDim, true)
+   self.sharedClones = {stepmodule}
+   self.modules[1] = stepmodule
    return self
 end
 
@@ -105,13 +105,13 @@ function nn.AbstractRecurrent:clearState()
    for i, clone in ipairs(self.sharedClones) do
       clone:clearState()
    end
-   self.recurrentModule:clearState()
+   self.modules[1]:clearState()
    return parent.clearState(self)
 end
 
 -- this method brings all the memory back to the start
 function AbstractRecurrent:forget()
-   -- the recurrentModule may contain an AbstractRecurrent instance (issue 107)
+   -- the stepmodule may contain an AbstractRecurrent instance (issue 107)
    parent.forget(self)
    local _ = require 'moses'
 
@@ -133,11 +133,11 @@ function AbstractRecurrent:forget()
 
    if not self.rmInSharedClones then
       -- Asserts that issue 129 is solved. In forget as it is often called.
-      -- Asserts that self.recurrentModule is part of the sharedClones.
+      -- Asserts that self.modules[1] is part of the sharedClones.
       -- Since its used for evaluation, it should be used for training.
       local nClone, maxIdx = 0, 1
       for k,v in pairs(self.sharedClones) do -- to prevent odd bugs
-         if torch.pointer(v) == torch.pointer(self.recurrentModule) then
+         if torch.pointer(v) == torch.pointer(self.modules[1]) then
             self.rmInSharedClones = true
             maxIdx = math.max(k, maxIdx)
          end
@@ -145,10 +145,10 @@ function AbstractRecurrent:forget()
       end
       if nClone > 1 then
          if not self.rmInSharedClones then
-            print"WARNING : recurrentModule should be added to sharedClones in constructor."
+            print"WARNING : modules[1] should be added to sharedClones in constructor."
             print"Adding it for you."
-            assert(torch.type(self.sharedClones[maxIdx]) == torch.type(self.recurrentModule))
-            self.recurrentModule = self.sharedClones[maxIdx]
+            assert(torch.type(self.sharedClones[maxIdx]) == torch.type(self.modules[1]))
+            self.modules[1] = self.sharedClones[maxIdx]
             self.rmInSharedClones = true
          end
       end

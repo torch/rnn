@@ -1,13 +1,12 @@
 local RecLSTM, parent = torch.class('nn.RecLSTM', 'nn.AbstractRecurrent')
 
 function RecLSTM:__init(inputsize, hiddensize, outputsize)
-   parent.__init(self, 999999)
-   self.modules[1] = nn.StepLSTM(inputsize, hiddensize, outputsize)
+   local stepmodule = nn.StepLSTM(inputsize, hiddensize, outputsize)
+   parent.__init(self, stepmodule)
+   -- let StepLSTM initialize inputsize, hiddensize, outputsize
    self.inputsize = self.modules[1].inputsize
    self.hiddensize = self.modules[1].hiddensize
    self.outputsize = self.modules[1].outputsize
-   self.recurrentModule = self.modules[1]
-   self.sharedClones[1] = self.modules[1]
 
    self.prev_h0 = torch.Tensor()
    self.prev_c0 = torch.Tensor()
@@ -66,11 +65,11 @@ function RecLSTM:updateOutput(input)
    local output, cell
    if self.train ~= false then
       self:recycle()
-      local recurrentModule = self:getStepModule(self.step)
+      local stepmodule = self:getStepModule(self.step)
       -- the actual forward propagation
-      output, cell = unpack(recurrentModule:updateOutput{input, prevOutput, prevCell})
+      output, cell = unpack(stepmodule:updateOutput{input, prevOutput, prevCell})
    else
-      output, cell = unpack(self.recurrentModule:updateOutput{input, prevOutput, prevCell})
+      output, cell = unpack(self.modules[1]:updateOutput{input, prevOutput, prevCell})
    end
 
    self.outputs[self.step] = output
@@ -119,7 +118,7 @@ function RecLSTM:_updateGradInput(input, gradOutput)
    assert(step >= 1)
 
    -- set the output/gradOutput states of current Module
-   local recurrentModule = self:getStepModule(step)
+   local stepmodule = self:getStepModule(step)
 
    -- backward propagate through this step
    local gradHiddenState = self:getGradHiddenState(step)
@@ -133,7 +132,7 @@ function RecLSTM:_updateGradInput(input, gradOutput)
    local inputTable = self:getHiddenState(step-1)
    table.insert(inputTable, 1, input)
 
-   local gradInputTable = recurrentModule:updateGradInput(inputTable, {gradOutput, gradCell})
+   local gradInputTable = stepmodule:updateGradInput(inputTable, {gradOutput, gradCell})
 
    local _ = require 'moses'
    self:setGradHiddenState(step-1, _.slice(gradInputTable, 2, 3))
@@ -146,14 +145,14 @@ function RecLSTM:_accGradParameters(input, gradOutput, scale)
    assert(step >= 1)
 
    -- set the output/gradOutput states of current Module
-   local recurrentModule = self:getStepModule(step)
+   local stepmodule = self:getStepModule(step)
 
    -- backward propagate through this step
    local inputTable = self:getHiddenState(step-1)
    table.insert(inputTable, 1, input)
    local gradOutputTable = self:getGradHiddenState(step)
    gradOutputTable[1] = self._gradOutputs[step] or gradOutputTable[1]
-   recurrentModule:accGradParameters(inputTable, gradOutputTable, scale)
+   stepmodule:accGradParameters(inputTable, gradOutputTable, scale)
 end
 
 function RecLSTM:clearState()

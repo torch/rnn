@@ -511,403 +511,7 @@ local function makeOldRecurrent()
    end
 end
 
-function rnntest.Recurrent_old()
-   -- make sure the new version is still as good as the last version
-   makeOldRecurrent()
-
-   local batchSize = 2
-   local hiddenSize = 10
-   local nStep = 3
-
-   -- recurrent neural network
-   local rnn = nn.Recurrent(
-      hiddenSize,
-      nn.Linear(hiddenSize, hiddenSize),
-      nn.Linear(hiddenSize, hiddenSize),
-      nn.ReLU(), 99999
-   )
-
-   local rnn2 = nn.ReTest(
-      rnn.startModule:clone(),
-      rnn.inputModule:clone(),
-      rnn.feedbackModule:clone(),
-      nn.ReLU(), 99999
-   )
-
-   local inputs, gradOutputs = {}, {}
-   local inputs2, gradOutputs2 = {}, {}
-   for i=1,nStep do
-      inputs[i] = torch.randn(batchSize, hiddenSize)
-      gradOutputs[i] = torch.randn(batchSize, hiddenSize)
-      inputs2[i] = inputs[i]:clone()
-      gradOutputs2[i] = gradOutputs[i]:clone()
-   end
-
-   local params, gradParams = rnn:getParameters()
-   local params2, gradParams2 = rnn2:getParameters()
-
-   for j=1,3 do
-
-      rnn:forget()
-      rnn2:forget()
-
-      rnn:zeroGradParameters()
-      rnn2:zeroGradParameters()
-
-      -- forward
-      for i=1,nStep do
-         local output = rnn:forward(inputs[i])
-         local output2 = rnn2:forward(inputs2[i])
-         mytester:assertTensorEq(output, output2, 0.000001, "Recurrent_old output err "..i)
-         rnn2:backward(inputs[i], gradOutputs2[i])
-      end
-
-      -- backward
-      rnn2:backwardThroughTime()
-      for i=nStep,1,-1 do
-         local gradInput = rnn:backward(inputs[i], gradOutputs[i])
-         mytester:assertTensorEq(gradInput, rnn2.gradInputs[i], 0.000001, "Recurrent_old gradInput err "..i)
-      end
-
-      local p1, gp1 = rnn:parameters()
-      local p2, gp2 = rnn2:parameters()
-
-      for i=1,#gp1 do
-         mytester:assertTensorEq(gp1[i], gp2[i], 0.00000001, "Recurrent_old gradParams err "..i)
-      end
-
-      mytester:assertTensorEq(gradParams, gradParams2, 0.00000001, "Recurrent_old gradParams error")
-
-      rnn2:updateParameters(0.1)
-      rnn:updateParameters(0.1)
-
-   end
-
-   if not pcall(function() require 'optim' end) then return end
-
-   local hiddenSize = 2
-   local rnn = nn.Recurrent(hiddenSize, nn.Linear(hiddenSize, hiddenSize), nn.Linear(hiddenSize, hiddenSize))
-
-   local criterion = nn.MSECriterion()
-   local sequence = torch.randn(4,2)
-   local s = sequence:clone()
-   local parameters, grads = rnn:getParameters()
-
-   function f(x)
-      parameters:copy(x)
-      -- Do the forward prop
-      rnn:zeroGradParameters()
-      assert(grads:sum() == 0)
-      local err = 0
-      local outputs = {}
-      for i = 1, sequence:size(1) - 1 do
-         local output = rnn:forward(sequence[i])
-         outputs[i] = output
-         err = err + criterion:forward(output, sequence[i + 1])
-      end
-      for i=sequence:size(1)-1,1,-1 do
-         criterion:forward(outputs[i], sequence[i + 1])
-         local gradOutput = criterion:backward(outputs[i], sequence[i + 1])
-         rnn:backward(sequence[i], gradOutput)
-      end
-      rnn:forget()
-      return err, grads
-   end
-
-   function optim.checkgrad(opfunc, x, eps)
-       -- compute true gradient:
-       local _,dC = opfunc(x)
-       dC:resize(x:size())
-
-       -- compute numeric approximations to gradient:
-       local eps = eps or 1e-7
-       local dC_est = torch.DoubleTensor(dC:size())
-       for i = 1,dC:size(1) do
-         x[i] = x[i] + eps
-         local C1 = opfunc(x)
-         x[i] = x[i] - 2 * eps
-         local C2 = opfunc(x)
-         x[i] = x[i] + eps
-         dC_est[i] = (C1 - C2) / (2 * eps)
-       end
-
-       -- estimate error of gradient:
-       local diff = torch.norm(dC - dC_est) / torch.norm(dC + dC_est)
-       return diff,dC,dC_est
-   end
-
-   local err = optim.checkgrad(f, parameters:clone())
-   mytester:assert(err < 0.0001, "Recurrent optim.checkgrad error")
-end
-
-function rnntest.Recurrent()
-   local batchSize = 4
-   local dictSize = 100
-   local hiddenSize = 12
-   local outputSize = 7
-   local nStep = 5
-   local inputModule = nn.LookupTable(dictSize, outputSize)
-   local transferModule = nn.Sigmoid()
-   -- test MLP feedback Module (because of Module:representations())
-   local feedbackModule = nn.Sequential()
-   feedbackModule:add(nn.Linear(outputSize, hiddenSize))
-   feedbackModule:add(nn.Sigmoid())
-   feedbackModule:add(nn.Linear(hiddenSize, outputSize))
-   -- rho = nStep
-   local mlp = nn.Recurrent(outputSize, inputModule, feedbackModule, transferModule:clone(), nStep)
-
-   local gradOutputs, outputs = {}, {}
-   -- inputs = {inputN, {inputN-1, {inputN-2, ...}}}}}
-   local inputs
-   local startModule = mlp.startModule:clone()
-   inputModule = mlp.inputModule:clone()
-   feedbackModule = mlp.feedbackModule:clone()
-
-   local mlp6 = mlp:clone()
-   mlp6:evaluate()
-
-   mlp:zeroGradParameters()
-   local mlp7 = mlp:clone()
-   mlp7.rho = nStep - 1
-   local inputSequence, gradOutputSequence = {}, {}
-   for step=1,nStep do
-      local input = torch.IntTensor(batchSize):random(1,dictSize)
-      inputSequence[step] = input
-      local gradOutput
-      if step ~= nStep then
-         -- for the sake of keeping this unit test simple,
-         gradOutput = torch.zeros(batchSize, outputSize)
-      else
-         -- only the last step will get a gradient from the output
-         gradOutput = torch.randn(batchSize, outputSize)
-      end
-      gradOutputSequence[step] = gradOutput
-
-      local output = mlp:forward(input)
-
-      local output6 = mlp6:forward(input)
-      mytester:assertTensorEq(output, output6, 0.000001, "evaluation error "..step)
-
-      local output7 = mlp7:forward(input)
-      mytester:assertTensorEq(output, output7, 0.000001, "rho = nStep-1 forward error "..step)
-
-      table.insert(gradOutputs, gradOutput)
-      table.insert(outputs, output:clone())
-
-      if inputs then
-         inputs = {input, inputs}
-      else
-         inputs = input
-      end
-   end
-
-   local mlp5 = mlp:clone()
-
-   -- backward propagate through time (BPTT)
-   local gradInputs1 = {}
-   local gradInputs7 = {}
-   for step=nStep,1,-1 do
-      table.insert(gradInputs1, mlp:backward(inputSequence[step], gradOutputSequence[step]))
-      if step > 1 then -- rho = nStep - 1 : shouldn't update startModule
-         table.insert(gradInputs7, mlp7:backward(inputSequence[step], gradOutputSequence[step]))
-      end
-   end
-
-
-   local gradInput = gradInputs1[1]:clone()
-   mlp:forget() -- test ability to forget
-   mlp:zeroGradParameters()
-   local foutputs = {}
-   for step=1,nStep do
-      foutputs[step] = mlp:forward(inputSequence[step])
-      mytester:assertTensorEq(foutputs[step], outputs[step], 0.00001, "Recurrent forget output error "..step)
-   end
-
-   local fgradInput
-   for step=nStep,1,-1 do
-      fgradInput = mlp:backward(inputSequence[step], gradOutputs[step])
-   end
-   fgradInput = fgradInput:clone()
-   mytester:assertTensorEq(gradInput, fgradInput, 0.00001, "Recurrent forget gradInput error")
-
-   local mlp10 = mlp7:clone()
-   mlp10:forget()
-   mytester:assert(#mlp10.outputs == 0, 'forget outputs error')
-   local i = 0
-   for k,v in pairs(mlp10.sharedClones) do
-      i = i + 1
-   end
-   mytester:assert(i == 4, 'forget recurrentOutputs error')
-
-   local mlp2 -- this one will simulate rho = nStep
-   local outputModules = {}
-   for step=1,nStep do
-      local inputModule_ = inputModule:sharedClone()
-      local outputModule = transferModule:clone()
-      table.insert(outputModules, outputModule)
-      if step == 1 then
-         local initialModule = nn.Sequential()
-         initialModule:add(inputModule_)
-         initialModule:add(startModule)
-         initialModule:add(outputModule)
-         mlp2 = initialModule
-      else
-         local parallelModule = nn.ParallelTable()
-         parallelModule:add(inputModule_)
-         local pastModule = nn.Sequential()
-         pastModule:add(mlp2)
-         local feedbackModule_ = feedbackModule:sharedClone()
-         pastModule:add(feedbackModule_)
-         parallelModule:add(pastModule)
-         local recurrentModule = nn.Sequential()
-         recurrentModule:add(parallelModule)
-         recurrentModule:add(nn.CAddTable())
-         recurrentModule:add(outputModule)
-         mlp2 = recurrentModule
-      end
-   end
-
-
-   local output2 = mlp2:forward(inputs)
-   mlp2:zeroGradParameters()
-
-   -- unlike mlp2, mlp8 will simulate rho = nStep -1
-   local mlp8 = mlp2:clone()
-   local inputModule8 = mlp8.modules[1].modules[1]
-   local m = mlp8.modules[1].modules[2].modules[1].modules[1].modules[2]
-   m = m.modules[1].modules[1].modules[2].modules[1].modules[1].modules[2]
-   local feedbackModule8 = m.modules[2]
-   local startModule8 = m.modules[1].modules[2] -- before clone
-   -- unshare the intialModule:
-   m.modules[1] = m.modules[1]:clone()
-   m.modules[2] = m.modules[2]:clone()
-   mlp8:backward(inputs, gradOutputs[#gradOutputs])
-
-   local gradInput2 = mlp2:backward(inputs, gradOutputs[#gradOutputs])
-   for step=1,nStep-1 do
-      gradInput2 = gradInput2[2]
-   end
-
-   mytester:assertTensorEq(gradInput, gradInput2, 0.000001, "recurrent gradInput")
-   mytester:assertTensorEq(outputs[#outputs], output2, 0.000001, "recurrent output")
-   for step=1,nStep do
-      local output, outputModule = outputs[step], outputModules[step]
-      mytester:assertTensorEq(output, outputModule.output, 0.000001, "recurrent output step="..step)
-   end
-
-   local mlp3 = nn.Sequential()
-   -- contains params and grads of mlp2 (the MLP version of the Recurrent)
-   mlp3:add(startModule):add(inputModule):add(feedbackModule)
-
-   local params2, gradParams2 = mlp3:parameters()
-   local params, gradParams = mlp:parameters()
-
-   mytester:assert(_.size(params2) == _.size(params), 'missing parameters')
-   mytester:assert(_.size(gradParams) == _.size(params), 'missing gradParameters')
-   mytester:assert(_.size(gradParams2) == _.size(params), 'missing gradParameters2')
-
-   for i,v in pairs(params) do
-      mytester:assertTensorEq(gradParams[i], gradParams2[i], 0.000001, 'gradParameter error ' .. i)
-   end
-
-   local mlp9 = nn.Sequential()
-   -- contains params and grads of mlp8
-   mlp9:add(startModule8):add(inputModule8):add(feedbackModule8)
-   local params9, gradParams9 = mlp9:parameters()
-   local params7, gradParams7 = mlp7:parameters()
-   mytester:assert(#_.keys(params9) == #_.keys(params7), 'missing parameters')
-   mytester:assert(#_.keys(gradParams7) == #_.keys(params7), 'missing gradParameters')
-   for i,v in pairs(params7) do
-      mytester:assertTensorEq(gradParams7[i], gradParams9[i], 0.00001, 'gradParameter error ' .. i)
-   end
-
-   mlp:updateParameters(0.1)
-
-   local params5 = mlp5:sparseParameters()
-   local params = mlp:sparseParameters()
-   for k,v in pairs(params) do
-      if params5[k] then
-         mytester:assertTensorNe(params[k], params5[k], 0.0000000001, 'backwardThroughTime error ' .. i)
-      end
-   end
-end
-
-function rnntest.Recurrent_oneElement()
-   -- test sequence of one element
-   local x = torch.rand(200)
-   local target = torch.rand(2)
-
-   local rho = 5
-   local hiddenSize = 100
-   -- RNN
-   local r = nn.Recurrent(
-     hiddenSize, nn.Linear(200,hiddenSize),
-     nn.Linear(hiddenSize, hiddenSize), nn.Sigmoid(),
-     rho
-   )
-
-   local seq = nn.Sequential()
-   seq:add(r)
-   seq:add(nn.Linear(hiddenSize, 2))
-
-   local criterion = nn.MSECriterion()
-
-   local output = seq:forward(x)
-   local err = criterion:forward(output,target)
-   local gradOutput = criterion:backward(output,target)
-
-   seq:backward(x,gradOutput)
-   seq:updateParameters(0.01)
-end
-
-function rnntest.Recurrent_TestTable()
-   -- Set up RNN where internal state is a table.
-   -- Trivial example is same RNN from rnntest.Recurrent test
-   -- but all layers are duplicated
-   local batchSize = 4
-   local inputSize = 10
-   local hiddenSize = 12
-   local outputSize = 7
-   local nStep = 10
-   local inputModule = nn.Linear(inputSize, outputSize)
-   local transferModule = nn.Sigmoid()
-   local learningRate = 0.1
-   -- test MLP feedback Module
-   local feedbackModule = nn.Sequential()
-   feedbackModule:add(nn.Linear(outputSize, hiddenSize))
-   feedbackModule:add(nn.Sigmoid())
-   feedbackModule:add(nn.Linear(hiddenSize, outputSize))
-   -- rho = nStep
-   local mlp = nn.Recurrent(
-      nn.ParallelTable()
-         :add(nn.Add(outputSize))
-         :add(nn.Add(outputSize)),
-      nn.ParallelTable()
-         :add(inputModule:clone())
-         :add(inputModule:clone()),
-      nn.ParallelTable()
-         :add(feedbackModule:clone())
-         :add(feedbackModule:clone()),
-      nn.ParallelTable()
-         :add(transferModule:clone())
-         :add(transferModule:clone()),
-      nStep,
-      nn.ParallelTable()
-         :add(nn.CAddTable())
-         :add(nn.CAddTable())
-   )
-
-   local input = torch.randn(batchSize, inputSize)
-   local err = torch.randn(batchSize, outputSize)
-   for i=1,nStep do
-      mlp:forward{input, input:clone()}
-   end
-   for i=nStep,1,-1 do
-      mlp:backward({input, input:clone()}, {err, err:clone()})
-   end
-end
-
-function rnntest.LSTM_main()
+function rnntest.RecLSTM_main()
    local batchSize = math.random(1,2)
    local inputSize = math.random(3,4)
    local outputSize = math.random(5,6)
@@ -924,10 +528,10 @@ function rnntest.LSTM_main()
          gradOutput[step] = torch.zeros(batchSize, outputSize)
       end
    end
-   local lstm = nn.LSTM(inputSize, outputSize)
+   local lstm = nn.RecLSTM(inputSize, outputSize)
 
    -- we will use this to build an LSTM step by step (with shared params)
-   local lstmStep = lstm.recurrentModule:clone()
+   local lstmStep = lstm.modules[1]:clone()
 
    -- forward/backward through LSTM
    local output = {}
@@ -988,7 +592,8 @@ function rnntest.LSTM_main()
 
    gradParams = lstm.recursiveCopy(nil, gradParams)
    gradInput = gradInput:clone()
-   mytester:assert(lstm.zeroTensor:sum() == 0, "zeroTensor error")
+   mytester:assert(lstm.prev_c0:sum() == 0, "prev_c0 error")
+   mytester:assert(lstm.prev_h0:sum() == 0, "prev_h0 error")
    lstm:forget()
    output = lstm.recursiveCopy(nil, output)
    local output3 = {}
@@ -1020,222 +625,6 @@ function rnntest.LSTM_main()
    end
 end
 
-function rnntest.FastLSTM()
-   local inputSize = 100
-   local batchSize = 40
-   local nStep = 3
-
-   local input = {}
-   local gradOutput = {}
-   for step=1,nStep do
-      input[step] = torch.randn(batchSize, inputSize)
-      gradOutput[step] = torch.randn(batchSize, inputSize)
-   end
-   local gradOutputClone = gradOutput[1]:clone()
-   local lstm1 = nn.LSTM(inputSize, inputSize, nil, false)
-   local lstm2 = nn.FastLSTM(inputSize, inputSize, nil)
-   local seq1 = nn.Sequencer(lstm1)
-   local seq2 = nn.Sequencer(lstm2)
-
-   local output1 = seq1:forward(input)
-   local gradInput1 = seq1:backward(input, gradOutput)
-   mytester:assertTensorEq(gradOutput[1], gradOutputClone, 0.00001, "LSTM modified gradOutput")
-   seq1:zeroGradParameters()
-   seq2:zeroGradParameters()
-
-   -- make them have same params
-   local ig = lstm1.inputGate:parameters()
-   local hg = lstm1.hiddenLayer:parameters()
-   local fg = lstm1.forgetGate:parameters()
-   local og = lstm1.outputGate:parameters()
-
-   local i2g = lstm2.i2g:parameters()
-   local o2g = lstm2.o2g:parameters()
-
-   ig[1]:copy(i2g[1]:narrow(1,1,inputSize))
-   ig[2]:copy(i2g[2]:narrow(1,1,inputSize))
-   ig[3]:copy(o2g[1]:narrow(1,1,inputSize))
-   hg[1]:copy(i2g[1]:narrow(1,inputSize+1,inputSize))
-   hg[2]:copy(i2g[2]:narrow(1,inputSize+1,inputSize))
-   hg[3]:copy(o2g[1]:narrow(1,inputSize+1,inputSize))
-   fg[1]:copy(i2g[1]:narrow(1,inputSize*2+1,inputSize))
-   fg[2]:copy(i2g[2]:narrow(1,inputSize*2+1,inputSize))
-   fg[3]:copy(o2g[1]:narrow(1,inputSize*2+1,inputSize))
-   og[1]:copy(i2g[1]:narrow(1,inputSize*3+1,inputSize))
-   og[2]:copy(i2g[2]:narrow(1,inputSize*3+1,inputSize))
-   og[3]:copy(o2g[1]:narrow(1,inputSize*3+1,inputSize))
-
-   local output1 = seq1:forward(input)
-   local gradInput1 = seq1:backward(input, gradOutput)
-   local output2 = seq2:forward(input)
-   local gradInput2 = seq2:backward(input, gradOutput)
-
-   mytester:assert(#output1 == #output2 and #output1 == nStep)
-   mytester:assert(#gradInput1 == #gradInput2 and #gradInput1 == nStep)
-   for i=1,#output1 do
-      mytester:assertTensorEq(output1[i], output2[i], 0.000001, "FastLSTM output error "..i)
-      mytester:assertTensorEq(gradInput1[i], gradInput2[i], 0.000001, "FastLSTM gradInput error "..i)
-   end
-end
-
-function rnntest.FastLSTM_nngraph()
-   -- test the nngraph version of FastLSTM
-   if not pcall(function() require 'nngraph' end) then
-      return
-   end
-
-   local lstmSize = 10
-   local batchSize = 4
-   local nStep = 3
-
-   local lstm1 = nn.FastLSTM(lstmSize) -- without nngraph
-   local params1, gradParams1 = lstm1:getParameters()
-   assert(torch.type(lstm1.recurrentModule) ~= 'nn.gModule')
-   nn.FastLSTM.usenngraph = true
-   local lstm2 = nn.FastLSTM(lstmSize) -- with nngraph
-   nn.FastLSTM.usenngraph = false
-   local params2, gradParams2 = lstm2:getParameters()
-   assert(torch.type(lstm2.recurrentModule) == 'nn.gModule')
-
-   lstm2.i2g.weight:copy(lstm1.i2g.weight)
-   lstm2.i2g.bias:copy(lstm1.i2g.bias)
-   lstm2.o2g.weight:copy(lstm1.o2g.weight)
-
-   mytester:assertTensorEq(params1, params2, 0.00000001, "FastLSTM nngraph params init err")
-
-   lstm1:zeroGradParameters()
-   lstm2:zeroGradParameters()
-   mytester:assertTensorEq(gradParams1, gradParams2, 0.000001, "FastLSTM nngraph zeroGradParameters err")
-
-   local seq1 = nn.Sequencer(lstm1)
-   local seq2 = nn.Sequencer(lstm2)
-
-   local input = {}
-   local gradOutput = {}
-   for step=1,nStep do
-      input[step] = torch.randn(batchSize, lstmSize)
-      gradOutput[step] = torch.randn(batchSize, lstmSize)
-   end
-
-   local rm1 = lstm1.recurrentModule
-   local rm2 = lstm2.recurrentModule
-
-   local input_ = {input[1], torch.randn(batchSize, lstmSize), torch.randn(batchSize, lstmSize)}
-   local gradOutput_ = {gradOutput[1], torch.randn(batchSize, lstmSize)}
-   local output1 = rm1:forward(input_)
-   local output2 = rm2:forward(input_)
-   rm1:zeroGradParameters()
-   rm2:zeroGradParameters()
-   local gradInput1 = rm1:backward(input_, gradOutput_)
-   local gradInput2 = rm2:backward(input_, gradOutput_)
-
-   mytester:assertTensorEq(output1[1], output2[1], 0.0000001, "FastLSTM.recurrentModule forward 1 error")
-   mytester:assertTensorEq(output1[2], output2[2], 0.0000001, "FastLSTM.recurrentModule forward 2 error")
-   for i=1,3 do
-      mytester:assertTensorEq(gradInput1[i], gradInput2[i], 0.0000001, "FastLSTM.recurrentModule backward err "..i)
-   end
-
-   mytester:assertTensorEq(gradParams1, gradParams2, 0.000001, "FastLSTM.recurrenModule nngraph gradParams err")
-
-   -- again, with sharedClone
-   local rm3 = lstm1.recurrentModule:sharedClone()
-   local rm4 = lstm2.recurrentModule:clone()
-
-   local output1 = rm3:forward(input_)
-   local output2 = rm4:forward(input_)
-   local gradInput1 = rm3:backward(input_, gradOutput_)
-   local gradInput2 = rm4:backward(input_, gradOutput_)
-
-   mytester:assertTensorEq(output1[1], output2[1], 0.0000001, "FastLSTM.recurrentModule forward 1 error")
-   mytester:assertTensorEq(output1[2], output2[2], 0.0000001, "FastLSTM.recurrentModule forward 2 error")
-   for i=1,3 do
-      mytester:assertTensorEq(gradInput1[i], gradInput2[i], 0.0000001, "FastLSTM.recurrentModule backward err "..i)
-   end
-
-   local p1, gp1 = rm3:parameters()
-   local p2, gp2 = rm4:parameters()
-
-   for i=1,#p1 do
-      mytester:assertTensorEq(gp1[i], gp2[i], 0.000001, "FastLSTM nngraph gradParam err "..i)
-   end
-
-   seq1:zeroGradParameters()
-   seq2:zeroGradParameters()
-   mytester:assertTensorEq(gradParams1, gradParams2, 0.000001, "FastLSTM nngraph zeroGradParameters err")
-   mytester:assert(gradParams1:sum() == 0)
-
-   local input_ = _.map(input, function(k, x) return x:clone() end)
-   local gradOutput_ = _.map(gradOutput, function(k, x) return x:clone() end)
-
-   -- forward/backward
-   local output1 = seq1:forward(input)
-   local gradInput1 = seq1:backward(input, gradOutput)
-   local output2 = seq2:forward(input)
-   local gradInput2 = seq2:backward(input, gradOutput)
-
-   for i=1,#input do
-      mytester:assertTensorEq(input[i], input_[i], 0.000001)
-      mytester:assertTensorEq(gradOutput[i], gradOutput_[i], 0.000001)
-   end
-
-   for i=1,#output1 do
-      mytester:assertTensorEq(output1[i], output2[i], 0.000001, "FastLSTM nngraph output error "..i)
-      mytester:assertTensorEq(gradInput1[i], gradInput2[i], 0.000001, "FastLSTM nngraph gradInput error "..i)
-   end
-
-   local p1, gp1 = lstm2:parameters()
-   local p2, gp2 = lstm2.sharedClones[2]:parameters()
-
-   for i=1,#p1 do
-      mytester:assertTensorEq(p1[i], p2[i], 0.000001, "FastLSTM nngraph param err "..i)
-      mytester:assertTensorEq(gp1[i], gp2[i], 0.000001, "FastLSTM nngraph gradParam err "..i)
-   end
-
-   mytester:assertTensorEq(gradParams1, gradParams2, 0.000001, "FastLSTM nngraph gradParams err")
-
-   if benchmark and pcall(function() require 'cunn' end ) then
-      local lstmSize = 128
-      local batchSize = 50
-      local nStep = 50
-
-      local input = {}
-      local gradOutput = {}
-      for step=1,nStep do
-         input[step] = torch.randn(batchSize, lstmSize):cuda()
-         gradOutput[step] = torch.randn(batchSize, lstmSize):cuda()
-      end
-
-      nn.FastLSTM.usenngraph = false
-      local lstm1 = nn.Sequencer(nn.FastLSTM(lstmSize)):cuda()
-      nn.FastLSTM.usenngraph = true
-      local lstm2 = nn.Sequencer(nn.FastLSTM(lstmSize)):cuda()
-      nn.FastLSTM.usenngraph = false
-      -- nn
-
-      local output = lstm1:forward(input)
-      cutorch.synchronize()
-      local a = torch.Timer()
-      for i=1,10 do
-         lstm1:forward(input)
-      end
-      cutorch.synchronize()
-      local nntime = a:time().real
-
-      -- nngraph
-
-      local output = lstm2:forward(input)
-      cutorch.synchronize()
-      local a = torch.Timer()
-      for i=1,10 do
-         lstm2:forward(input)
-      end
-      cutorch.synchronize()
-      local nngraphtime = a:time().real
-
-      print("Benchmark: nn vs nngraph time", nntime, nngraphtime)
-   end
-end
-
 function rnntest.GRU()
    local batchSize = math.random(1,2)
    local inputSize = math.random(3,4)
@@ -1256,7 +645,7 @@ function rnntest.GRU()
    local gru = nn.GRU(inputSize, outputSize):maskZero(1) -- issue 145
 
    -- we will use this to build an GRU step by step (with shared params)
-   local gruStep = gru.recurrentModule:clone()
+   local gruStep = gru.modules[1]:clone()
 
    -- forward/backward through GRU
    local output = {}
@@ -1349,13 +738,14 @@ function rnntest.Sequencer()
    local outputSize = 7
    local nStep = 5
 
-   -- test with recurrent module
-   local inputModule = nn.Linear(inputSize, outputSize)
-   local transferModule = nn.Sigmoid()
-   -- test MLP feedback Module (because of Module:representations())
-   local feedbackModule = nn.Euclidean(outputSize, outputSize)
-   -- rho = nStep
-   local rnn = nn.Recurrent(outputSize, inputModule, feedbackModule, transferModule, nStep)
+   local stepmodule = nn.Sequential()
+      :add(nn.ParallelTable()
+         :add(nn.Linear(inputSize, outputSize))
+         :add(nn.Euclidean(outputSize, outputSize)))
+      :add(nn.CAddTable())
+      :add(nn.Sigmoid())
+
+   local rnn = nn.Recurrence(stepmodule, outputSize, 1)
    rnn:zeroGradParameters()
    local rnn2 = rnn:clone()
 
@@ -1679,8 +1069,12 @@ function rnntest.Sequencer()
          mytester:assertTensorEq(params7[i], params8[i], 0.0000001, "Sequencer "..torch.type(rnn7).." remember params err "..i)
       end
    end
-   testRemember(nn.Recurrent(outputSize, nn.Linear(outputSize, outputSize), feedbackModule:clone(), transferModule:clone(), nStep7:max()))
-   testRemember(nn.LSTM(outputSize, outputSize, nStep7:max()))
+   local linearRNN = nn.LinearRNN(inputSize, outputSize)
+   linearRNN:maxBPTTstep(nStep7:max())
+   testRemember(linearRNN)
+   local recLSTM = nn.RecLSTM(outputSize, outputSize)
+   recLSTM:maxBPTTstep(nStep7:max())
+   testRemember(recLSTM)
 
    -- test in evaluation mode
    rnn3:evaluate()
@@ -3713,46 +3107,6 @@ function rnntest.LSTM_char_rnn()
    -- runtime: char, rnn, char/rnn    1.0614919662476 1.124755859375  0.94375322199913
 end
 
--- https://github.com/Element-Research/rnn/issues/28
-function rnntest.Recurrent_checkgrad()
-   if not pcall(function() require 'optim' end) then return end
-
-   local batchSize = 3
-   local hiddenSize = 2
-   local nIndex = 2
-   local rnn = nn.Recurrent(hiddenSize, nn.LookupTable(nIndex, hiddenSize),
-                    nn.Linear(hiddenSize, hiddenSize))
-   local seq = nn.Sequential()
-      :add(rnn)
-      :add(nn.Linear(hiddenSize, hiddenSize))
-
-   rnn = nn.Sequencer(seq)
-
-   local criterion = nn.SequencerCriterion(nn.MSECriterion())
-   local inputs, targets = {}, {}
-   for i=1,2 do
-      inputs[i] = torch.Tensor(batchSize):random(1,nIndex)
-      targets[i] = torch.randn(batchSize, hiddenSize)
-   end
-
-   local parameters, grads = rnn:getParameters()
-
-   function f(x)
-      parameters:copy(x)
-      -- Do the forward prop
-      rnn:zeroGradParameters()
-      assert(grads:sum() == 0)
-      local outputs = rnn:forward(inputs)
-      local err = criterion:forward(outputs, targets)
-      local gradOutputs = criterion:backward(outputs, targets)
-      rnn:backward(inputs, gradOutputs)
-      return err, grads
-   end
-
-   local err = optim.checkgrad(f, parameters:clone())
-   mytester:assert(err < 0.0001, "Recurrent optim.checkgrad error")
-end
-
 function rnntest.LSTM_checkgrad()
    if not pcall(function() require 'optim' end) then return end
 
@@ -3801,104 +3155,38 @@ function rnntest.Recursor()
    local outputSize = 7
    local rho = 5
 
-   -- USE CASE 1. Recursor(Recurrent)
+   local inputs = torch.randn(rho, batchSize, inputSize)
+   local gradOutputs = torch.randn(rho, batchSize, outputSize)
 
-   local inputModule = nn.Linear(inputSize, outputSize)
-   local transferModule = nn.Sigmoid()
-   -- test MLP feedback Module (because of Module:representations())
-   local feedbackModule = nn.Sequential()
-   feedbackModule:add(nn.Linear(outputSize, hiddenSize))
-   feedbackModule:add(nn.Sigmoid())
-   feedbackModule:add(nn.Linear(hiddenSize, outputSize))
-   local start = nn.Add(outputSize)
+   -- USE CASE 1. Recursor(LSTM)
 
-   local rnn = nn.Recurrent(start, nn.Identity(), feedbackModule, transferModule:clone(), rho)
-   local re = nn.Recursor(nn.Sequential():add(inputModule):add(rnn), rho)
-   re:zeroGradParameters()
-
-   local re2 = nn.Recurrent(start:clone(), inputModule:clone(), feedbackModule:clone(), transferModule:clone(), rho)
-   re2:zeroGradParameters()
-
-   local inputs = {}
-   local gradOutputs = {}
-   local outputs, outputs2 = {}, {}
-   local gradInputs = {}
-
-   for i=1,rho do
-      table.insert(inputs, torch.randn(batchSize, inputSize))
-      table.insert(gradOutputs, torch.randn(batchSize, outputSize))
-      -- forward
-      table.insert(outputs, re:forward(inputs[i]))
-      table.insert(outputs2, re2:forward(inputs[i]))
-   end
-
-   local gradInputs_2 = {}
-   for i=rho,1,-1 do
-      -- backward
-      gradInputs_2[i] = re2:backward(inputs[i], gradOutputs[i])
-   end
-
-   re2:updateParameters(0.1)
-
-   -- recursor requires reverse-time-step order during backward
-   for i=rho,1,-1 do
-      gradInputs[i] = re:backward(inputs[i], gradOutputs[i])
-   end
-
-   for i=1,rho do
-      mytester:assertTensorEq(outputs[i], outputs2[i], 0.0000001, "Recursor(Recurrent) fwd err "..i)
-      mytester:assertTensorEq(gradInputs[i], gradInputs_2[i], 0.0000001, "Recursor(Recurrent) bwd err "..i)
-   end
-
-   re:updateParameters(0.1)
-
-   local mlp = nn.Container():add(rnn.feedbackModule):add(rnn.startModule):add(inputModule)
-   local mlp2 = nn.Container():add(re2.feedbackModule):add(re2.startModule):add(re2.inputModule)
-
-   local params, gradParams = mlp:parameters()
-   local params2, gradParams2 = mlp2:parameters()
-
-   mytester:assert(#params == #params2, "Recursor(Recurrent) #params err")
-   for i=1,#params do
-      mytester:assertTensorEq(params[i], params2[i], 0.0000001, "Recursor(Recurrent) updateParameter err "..i)
-      mytester:assertTensorEq(gradParams[i], gradParams2[i], 0.0000001, "Recursor(Recurrent) accGradParams err "..i)
-   end
-
-   -- USE CASE 2. Recursor(LSTM)
-
-   local rnn = nn.LSTM(inputSize, outputSize)
+   local rnn = nn.RecLSTM(inputSize, outputSize)
    local re2 = rnn:clone()
    local re = nn.Recursor(nn.Sequential():add(rnn))
    re:zeroGradParameters()
    re2:zeroGradParameters()
 
-   local outputs, outputs2 = {}, {}
-   local gradInputs = {}
+   local outputs = torch.Tensor(rho, batchSize, outputSize)
+   local outputs2 = outputs:clone()
+   local gradInputs = torch.Tensor(rho, batchSize, inputSize)
 
    for i=1,rho do
       -- forward
-      table.insert(outputs, re:forward(inputs[i]))
-      table.insert(outputs2, re2:forward(inputs[i]))
+      outputs[i] = re:forward(inputs[i])
+      outputs2[i] = re2:forward(inputs[i])
    end
 
-   local gradInputs_2 = {}
+   local gradInputs_2 = torch.Tensor(rho, batchSize, inputSize)
    for i=rho,1,-1 do
       -- backward
       gradInputs_2[i] = re2:backward(inputs[i], gradOutputs[i])
-   end
-
-   re2:updateParameters(0.1)
-
-   -- recursor requires reverse-time-step order during backward
-   for i=rho,1,-1 do
       gradInputs[i] = re:backward(inputs[i], gradOutputs[i])
    end
 
-   for i=1,rho do
-      mytester:assertTensorEq(outputs[i], outputs2[i], 0.0000001, "Recursor(LSTM) fwd err "..i)
-      mytester:assertTensorEq(gradInputs[i], gradInputs_2[i], 0.0000001, "Recursor(LSTM) bwd err "..i)
-   end
+   mytester:assertTensorEq(outputs, outputs2, 0.0000001, "Recursor(LSTM) fwd err ")
+   mytester:assertTensorEq(gradInputs, gradInputs_2, 0.0000001, "Recursor(LSTM) bwd err ")
 
+   re2:updateParameters(0.1)
    re:updateParameters(0.1)
 
    local params, gradParams = rnn:parameters()
@@ -3910,9 +3198,9 @@ function rnntest.Recursor()
       mytester:assertTensorEq(gradParams[i], gradParams2[i], 0.0000001, "Recursor(LSTM) accGradParams err "..i)
    end
 
-   -- USE CASE 3. Sequencer(Recursor)
+   -- USE CASE 2. Sequencer(Recursor)
 
-   local re2 = nn.LSTM(inputSize, outputSize)
+   local re2 = nn.RecLSTM(inputSize, outputSize)
    local lstm2 = re2:clone()
    local rec = nn.Recursor(lstm2)
    local seq = nn.Sequencer(rec)
@@ -3927,22 +3215,18 @@ function rnntest.Recursor()
    local outputs = seq:forward(inputs)
    local gradInputs = seq:backward(inputs, gradOutputs)
 
-   local outputs2 = {}
    for i=1,rho do
-      table.insert(outputs2, re2:forward(inputs[i]))
+      outputs2[i] = re2:forward(inputs[i])
    end
 
-   local gradInputs_2 = {}
    for i=rho,1,-1 do
       gradInputs_2[i] = re2:backward(inputs[i], gradOutputs[i])
    end
 
    re2:updateParameters(0.1)
 
-   for i=1,rho do
-      mytester:assertTensorEq(outputs[i], outputs2[i], 0.0000001, "Sequencer(Recursor(LSTM)) fwd err "..i)
-      mytester:assertTensorEq(gradInputs[i], gradInputs_2[i], 0.0000001, "Sequencer(Recursor(LSTM)) bwd err "..i)
-   end
+   mytester:assertTensorEq(outputs, outputs2, 0.0000001, "Sequencer(Recursor(LSTM)) fwd err ")
+   mytester:assertTensorEq(gradInputs, gradInputs_2, 0.0000001, "Sequencer(Recursor(LSTM)) bwd err ")
 
    seq:updateParameters(0.1)
 
@@ -3955,24 +3239,20 @@ function rnntest.Recursor()
       mytester:assertTensorEq(gradParams[i], gradParams2[i], 0.0000001, "Sequencer(Recursor(LSTM)) accGradParams err "..i)
    end
 
-   -- USE CASE 4. Recursor(Recursor(LSTM))
+   -- USE CASE 3. Recursor(Recursor(LSTM))
 
-   local rnn = nn.LSTM(inputSize, outputSize)
+   local rnn = nn.RecLSTM(inputSize, outputSize)
    local re2 = rnn:clone()
    local re = nn.Recursor(nn.Recursor(nn.Sequential():add(rnn)))
    re:zeroGradParameters()
    re2:zeroGradParameters()
 
-   local outputs, outputs2 = {}, {}
-   local gradInputs = {}
-
    for i=1,rho do
       -- forward
-      table.insert(outputs, re:forward(inputs[i]))
-      table.insert(outputs2, re2:forward(inputs[i]))
+      outputs = re:forward(inputs[i])
+      outputs2 = re2:forward(inputs[i])
    end
 
-   local gradInputs_2 = {}
    for i=rho,1,-1 do
       -- backward
       gradInputs_2[i] = re2:backward(inputs[i], gradOutputs[i])
@@ -3985,10 +3265,8 @@ function rnntest.Recursor()
       gradInputs[i] = re:backward(inputs[i], gradOutputs[i])
    end
 
-   for i=1,rho do
-      mytester:assertTensorEq(outputs[i], outputs2[i], 0.0000001, "Recursor(Recursor(LSTM)) fwd err "..i)
-      mytester:assertTensorEq(gradInputs[i], gradInputs_2[i], 0.0000001, "Recursor(Recursor(LSTM)) bwd err "..i)
-   end
+   mytester:assertTensorEq(outputs, outputs2, 0.0000001, "Recursor(Recursor(LSTM)) fwd err ")
+   mytester:assertTensorEq(gradInputs, gradInputs_2, 0.0000001, "Recursor(Recursor(LSTM)) bwd err ")
 
    re:updateParameters(0.1)
 
@@ -4005,132 +3283,66 @@ end
 
 function rnntest.Recurrence()
    local batchSize = 4
-   local inputSize = 10
-   local outputSize = 12
-   local rho = 3
+   local inputSize = 3
+   local outputSize = 2
+   local seqlen = 3
 
-   -- 1. compare to LSTM
-   local lstm2 = nn.LSTM(inputSize, outputSize)
-   local rm = lstm2.recurrentModule:clone()
+   local lstm2 = nn.RecLSTM(inputSize, outputSize)
    local seq2 = nn.Sequencer(lstm2)
 
-   rm:insert(nn.FlattenTable(), 1)
-   local recurrence = nn.Recurrence(rm, {{outputSize}, {outputSize}}, 1)
-   local lstm = nn.Sequential():add(recurrence):add(nn.SelectTable(1))
+   local stepmodule = nn.Sequential()
+      :add(nn.FlattenTable())
+      :add(lstm2.modules[1]:clone())
+   local recmodule = nn.Sequential()
+      :add(nn.Recurrence(stepmodule, {{outputSize}, {outputSize}}, 1, seqlen))
+      :add(nn.SelectTable(1))
+   local lstm = recmodule
    local seq = nn.Sequencer(lstm)
 
-   local inputs, gradOutputs = {}, {}
-   for i=1,rho do
-      table.insert(inputs, torch.randn(batchSize, inputSize))
-      table.insert(gradOutputs, torch.randn(batchSize, outputSize))
-   end
+   local inputs = torch.randn(seqlen, batchSize, inputSize)
+   local gradOutputs = torch.randn(seqlen, batchSize, outputSize)
 
    seq:zeroGradParameters()
    seq2:zeroGradParameters()
 
+   local params, gradParams = seq:parameters()
+   local params2, gradParams2 = seq2:parameters()
+
+   for i=1,#params do
+      mytester:assertTensorEq(params[i], params2[i], 0.0000001, "Recurrence updateParameter err "..i)
+      mytester:assertTensorEq(gradParams[i], gradParams2[i], 0.0000001, "Recurrence accGradParams err "..i)
+   end
+
    local outputs = seq:forward(inputs)
    local outputs2 = seq2:forward(inputs)
 
-   for i=1,rho do
-      mytester:assertTensorEq(outputs[i], outputs2[i], 0.0000001, "Recurrence fwd err "..i)
-   end
+   mytester:assertTensorEq(outputs, outputs2, 0.0000001, "Recurrence fwd err ")
 
    local gradInputs = seq:backward(inputs, gradOutputs)
    local gradInputs2 = seq2:backward(inputs, gradOutputs)
 
-   for i=1,rho do
-      mytester:assertTensorEq(gradInputs[i], gradInputs2[i], 0.0000001, "Recurrence bwd err "..i)
-   end
+   mytester:assertTensorEq(gradInputs, gradInputs2, 0.0000001, "Recurrence bwd err ")
 
    seq:updateParameters(0.1)
    seq2:updateParameters(0.1)
-
-   local params, gradParams = seq:parameters()
-   local params2, gradParams2 = seq2:parameters()
 
    mytester:assert(#params == #params2, "Recurrence #params err")
    for i=1,#params do
       mytester:assertTensorEq(params[i], params2[i], 0.0000001, "Recurrence updateParameter err "..i)
       mytester:assertTensorEq(gradParams[i], gradParams2[i], 0.0000001, "Recurrence accGradParams err "..i)
    end
-
-   -- 2. compare to simple RNN
-
-   local nIndex = 50
-   local hiddenSize = 20
-
-   local inputLayer = nn.LookupTable(nIndex, hiddenSize)
-   local feedbackLayer = nn.Linear(hiddenSize, hiddenSize)
-   local outputLayer = nn.Linear(hiddenSize, outputSize)
-
-   local rnn = nn.Recurrent(hiddenSize, inputLayer, feedbackLayer, nn.Sigmoid(), 99999 )
-   rnn.startModule:share(rnn.feedbackModule, 'bias')
-
-   -- just so the params are aligned
-   local seq2_ = nn.Sequential()
-      :add(nn.ParallelTable()
-         :add(inputLayer)
-         :add(feedbackLayer))
-      :add(outputLayer)
-
-   local seq2 = nn.Sequencer(nn.Sequential():add(rnn):add(outputLayer):add(nn.LogSoftMax()))
-
-   local rm = nn.Sequential()
-   :add(nn.ParallelTable()
-      :add(inputLayer:clone())
-      :add(feedbackLayer:clone()))
-   :add(nn.CAddTable())
-   :add(nn.Sigmoid())
-
-   local seq = nn.Sequencer(nn.Sequential()
-      :add(nn.Recurrence(rm, hiddenSize, 0))
-      :add(outputLayer:clone())
-      :add(nn.LogSoftMax()))
-
-   local inputs, gradOutputs = {}, {}
-   for i=1,rho do
-      table.insert(inputs, torch.IntTensor(batchSize):random(1,nIndex))
-      table.insert(gradOutputs, torch.randn(batchSize, outputSize))
-   end
-
-   seq:zeroGradParameters()
-   seq2:zeroGradParameters()
-
-   local outputs = seq:forward(inputs)
-   local outputs2 = seq2:forward(inputs)
-
-   for i=1,rho do
-      mytester:assertTensorEq(outputs[i], outputs2[i], 0.0000001, "Recurrence RNN fwd err "..i)
-   end
-
-   seq:backward(inputs, gradOutputs)
-   seq2:backward(inputs, gradOutputs)
-
-   seq:updateParameters(0.1)
-   seq2:updateParameters(0.1)
-
-   local params, gradParams = seq:parameters()
-   local params2, gradParams2 = seq2_:parameters()
-
-   mytester:assert(#params == #params2, "Recurrence RNN #params err")
-   for i=1,#params do
-      mytester:assertTensorEq(params[i], params2[i], 0.0000001, "Recurrence RNN updateParameter err "..i)
-      if i~= 3 then -- the gradBias isn't shared (else udpated twice)
-         mytester:assertTensorEq(gradParams[i], gradParams2[i], 0.0000001, "Recurrence RNN accGradParams err "..i)
-      end
-   end
 end
 
-function rnntest.Recurrence_FastLSTM()
+function rnntest.Recurrence_nested()
    -- issue 107
-   -- this will test the use case where an AbstractRecurrent.recurrentModule
+   -- this will test the use case where an AbstractRecurrent.modules[1]
    -- contains an AbstractRecurrent instance!
 
    local batchSize = 4
-   local hiddenSize = 10
+   local hiddenSize = 2
    local rho = 3
 
-   local lstm = nn.FastLSTM(hiddenSize,hiddenSize)
+   local lstm = nn.RecLSTM(hiddenSize,hiddenSize)
 
    local rm = nn.Sequential()
       :add(nn.CSubTable())
@@ -4161,7 +3373,7 @@ function rnntest.Recurrence_FastLSTM()
    end
 end
 
--- mock Recurrent and LSTM recurrentModules for UT
+-- mock Recurrent and LSTM stepmodule for UT
 -- must be stateless
 -- forwarding zeros must not return zeros -> use Sigmoid()
 local function recurrentModule()
@@ -4814,7 +4026,7 @@ function rnntest.issue129()
    end
 
    mytester:assertTensorEq(model1:get(1).running_mean, model:get(2).module.sharedClones[1].modules[1].running_mean, 0.000001)
-   mytester:assertTensorEq(model:get(2).module.sharedClones[1].modules[1].running_mean, model:get(2).module.recurrentModule.modules[1].running_mean, 0.0000001)
+   mytester:assertTensorEq(model:get(2).module.sharedClones[1].modules[1].running_mean, model:get(2).module.modules[1].modules[1].running_mean, 0.0000001)
 
    model:evaluate()
    local output2 = model:forward(input):clone()
@@ -5930,7 +5142,8 @@ function rnntest.NormStabilizer()
 
    function NS:__init(beta, rho)
       parent.__init(self, rho or 9999)
-      self.recurrentModule = nn.CopyGrad()
+      self.modules[1] = nn.CopyGrad()
+      self.shareClones[1] = self.modules[1]
       self.beta = beta
    end
 
