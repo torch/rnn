@@ -1,5 +1,5 @@
 require 'nn'
-require 'dpnn'
+require 'rnn'
 require 'cunn'
 require 'cutorch'
 

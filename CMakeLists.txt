@@ -32,7 +32,6 @@ SET(luasrc
   NormStabilizer.lua
   Padding.lua
   Recurrence.lua
-  deprecated/Recurrent.lua
   RecurrentAttention.lua
   recursiveUtils.lua
   Recursor.lua

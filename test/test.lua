@@ -2909,9 +2909,6 @@ function rnntest.AbstractRecurrent_maskZero()
    testmask(nn.Recurrence(rm, 10, 1))
    testmask(nn.LSTM(10,10))
    testmask(nn.GRU(10,10))
-
-   local success, err = pcall(function() nn.Recurrent(10, nn.Linear(10,10), nn.Linear(10,10)):maskZero() end)
-   mytester:assert(not success, "nn.Recurrent supposed to give error on maskZero()")
 end
 
 function rnntest.AbstractRecurrent_trimZero()
@@ -2959,9 +2956,6 @@ function rnntest.AbstractRecurrent_trimZero()
    testmask(nn.Recurrence(rm, 10, 1))
    testmask(nn.LSTM(10,10))
    testmask(nn.GRU(10,10))
-
-   local success, err = pcall(function() nn.Recurrent(10, nn.Linear(10,10), nn.Linear(10,10)):trimZero() end)
-   mytester:assert(not success, "nn.Recurrent supposed to give error on trimZero()")
 end
 
 local function forwardbackward(module, criterion, input, expected)
