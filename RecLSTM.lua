@@ -19,9 +19,9 @@ end
 function RecLSTM:maskZero()
    assert(torch.isTypeOf(self.modules[1], 'nn.StepLSTM'))
    for i,stepmodule in pairs(self.sharedClones) do
-      stepmodule.maskzero = true
+      stepmodule:maskZero()
    end
-   self.modules[1].maskzero = true
+   self.modules[1]:maskZero()
    return self
 end
 

@@ -139,7 +139,7 @@ function Recurrence:getHiddenState(step, input)
             local batchSize = self:getBatchSize(input)
             self.zeroTensor = self:recursiveResizeZero(self.zeroTensor, self.outputSize, batchSize)
          end
-         prevOutput = self.userPrevOutput or self.outputs[step] or self.zeroTensor
+         prevOutput = self.outputs[step] or self.zeroTensor
       end
    else
       -- previous output of this module
