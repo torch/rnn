@@ -6,13 +6,11 @@ Example of "coupled" separate encoder and decoder networks, e.g. for sequence-to
 
 require 'rnn'
 
-version = 1.4 -- Uses [get,set]GradHiddenState for LSTM
-
 local opt = {}
+opt.version = 1.5 -- fixed setHiddenState(0) bug
 opt.learningRate = 0.1
 opt.hiddenSize = 6
 opt.numLayers = 1
-opt.useSeqLSTM = true -- faster implementation of LSTM + Sequencer
 opt.vocabSize = 7
 opt.seqLen = 7 -- length of the encoded sequence (with padding)
 opt.niter = 1000
@@ -20,25 +18,14 @@ opt.niter = 1000
 --[[ Forward coupling: Copy encoder cell and output to decoder LSTM ]]--
 function forwardConnect(enc, dec)
    for i=1,#enc.lstmLayers do
-      if opt.useSeqLSTM then
-         dec.lstmLayers[i].userPrevOutput = enc.lstmLayers[i].output[opt.seqLen]
-         dec.lstmLayers[i].userPrevCell = enc.lstmLayers[i].cell[opt.seqLen]
-      else
-         dec.lstmLayers[i].userPrevOutput = nn.rnn.recursiveCopy(dec.lstmLayers[i].userPrevOutput, enc.lstmLayers[i].outputs[opt.seqLen])
-         dec.lstmLayers[i].userPrevCell = nn.rnn.recursiveCopy(dec.lstmLayers[i].userPrevCell, enc.lstmLayers[i].cells[opt.seqLen])
-      end
+      dec.lstmLayers[i]:setHiddenState(0, enc.lstmLayers[i]:getHiddenState(opt.seqLen))
    end
 end
 
 --[[ Backward coupling: Copy decoder gradients to encoder LSTM ]]--
 function backwardConnect(enc, dec)
    for i=1,#enc.lstmLayers do
-      if opt.useSeqLSTM then
-         enc.lstmLayers[i].userNextGradCell = dec.lstmLayers[i].userGradPrevCell
-         enc.lstmLayers[i].gradPrevOutput = dec.lstmLayers[i].userGradPrevOutput
-      else
-         enc:setGradHiddenState(opt.seqLen, dec:getGradHiddenState(0))
-      end
+      enc.lstmLayers[i]:setGradHiddenState(opt.seqLen, dec.lstmLayers[i]:getGradHiddenState(0))
    end
 end
 
@@ -47,14 +34,8 @@ local enc = nn.Sequential()
 enc:add(nn.LookupTableMaskZero(opt.vocabSize, opt.hiddenSize))
 enc.lstmLayers = {}
 for i=1,opt.numLayers do
-   if opt.useSeqLSTM then
-      enc.lstmLayers[i] = nn.SeqLSTM(opt.hiddenSize, opt.hiddenSize)
-      enc.lstmLayers[i]:maskZero()
-      enc:add(enc.lstmLayers[i])
-   else
-      enc.lstmLayers[i] = nn.LSTM(opt.hiddenSize, opt.hiddenSize):maskZero(1)
-      enc:add(nn.Sequencer(enc.lstmLayers[i]))
-   end
+   enc.lstmLayers[i] = nn.Sequencer(nn.RecLSTM(opt.hiddenSize, opt.hiddenSize):maskZero())
+   enc:add(enc.lstmLayers[i])
 end
 enc:add(nn.Select(1, -1))
 
@@ -63,14 +44,8 @@ local dec = nn.Sequential()
 dec:add(nn.LookupTableMaskZero(opt.vocabSize, opt.hiddenSize))
 dec.lstmLayers = {}
 for i=1,opt.numLayers do
-   if opt.useSeqLSTM then
-      dec.lstmLayers[i] = nn.SeqLSTM(opt.hiddenSize, opt.hiddenSize)
-      dec.lstmLayers[i]:maskZero()
-      dec:add(dec.lstmLayers[i])
-   else
-      dec.lstmLayers[i] = nn.LSTM(opt.hiddenSize, opt.hiddenSize):maskZero(1)
-      dec:add(nn.Sequencer(dec.lstmLayers[i]))
-   end
+   dec.lstmLayers[i] = nn.Sequencer(nn.RecLSTM(opt.hiddenSize, opt.hiddenSize):maskZero())
+   dec:add(dec.lstmLayers[i])
 end
 dec:add(nn.Sequencer(nn.MaskZero(nn.Linear(opt.hiddenSize, opt.vocabSize), 1)))
 dec:add(nn.Sequencer(nn.MaskZero(nn.LogSoftMax(), 1)))

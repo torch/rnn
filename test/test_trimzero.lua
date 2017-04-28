@@ -1,5 +1,4 @@
 require 'rnn'
-require 'dp'
 require 'sys'
 
 torch.manualSeed(123)
@@ -57,6 +56,6 @@ for ir,arch in pairs(rnns) do
          collectgarbage()
       end
       elapse = sys.toc()
-      print('elapse time:', elapse)   
+      print('elapse time:', elapse)
    end
 end

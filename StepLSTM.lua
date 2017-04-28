@@ -271,6 +271,11 @@ function StepLSTM:parameters()
    return {self.weight, self.bias, self.weightO}, {self.gradWeight, self.gradBias, self.gradWeightO}
 end
 
+function StepLSTM:maskZero()
+   self.maskzero = true
+   return self
+end
+
 -- for sharedClone
 local _ = require 'moses'
 local params = _.clone(parent.dpnn_parameters)

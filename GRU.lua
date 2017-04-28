@@ -16,7 +16,6 @@
 local GRU, parent = torch.class('nn.GRU', 'nn.AbstractRecurrent')
 
 function GRU:__init(inputSize, outputSize, rho, p, mono)
-   parent.__init(self, rho or 9999)
    self.p = p or 0
    if p and p ~= 0 then
       assert(nn.Dropout(p,false,false,true).lazy, 'only work with Lazy Dropout!')
@@ -25,10 +24,8 @@ function GRU:__init(inputSize, outputSize, rho, p, mono)
    self.inputSize = inputSize
    self.outputSize = outputSize
    -- build the model
-   self.recurrentModule = self:buildModel()
-   -- make it work with nn.Container
-   self.modules[1] = self.recurrentModule
-   self.sharedClones[1] = self.recurrentModule
+   local stepmodule = self:buildModel()
+   parent.__init(self, stepmodule)
 
    -- for output(0), cell(0) and gradCell(T)
    self.zeroTensor = torch.Tensor()
@@ -128,71 +125,22 @@ function GRU:buildModel()
    return seq
 end
 
-function GRU:getHiddenState(step, input)
-   local prevOutput
-   if step == 0 then
-      prevOutput = self.userPrevOutput or self.outputs[step] or self.zeroTensor
-      if input then
-         if input:dim() == 2 then
-            self.zeroTensor:resize(input:size(1), self.outputSize):zero()
-         else
-            self.zeroTensor:resize(self.outputSize):zero()
-         end
-      end
-   else
-      -- previous output and cell of this module
-      prevOutput = self.outputs[step]
-   end
-   return prevOutput
-end
-
-
-function GRU:setHiddenState(step, hiddenState)
-   assert(torch.isTensor(hiddenState))
-   self.outputs[step] = hiddenState
-end
-
 ------------------------- forward backward -----------------------------
-function GRU:updateOutput(input)
+function GRU:_updateOutput(input)
    local prevOutput = self:getHiddenState(self.step-1, input)
 
    -- output(t) = gru{input(t), output(t-1)}
    local output
    if self.train ~= false then
       self:recycle()
-      local recurrentModule = self:getStepModule(self.step)
+      local stepmodule = self:getStepModule(self.step)
       -- the actual forward propagation
-      output = recurrentModule:updateOutput{input, prevOutput}
+      output = stepmodule:updateOutput{input, prevOutput}
    else
-      output = self.recurrentModule:updateOutput{input, prevOutput}
+      output = self.modules[1]:updateOutput{input, prevOutput}
    end
 
-   self.outputs[self.step] = output
-
-   self.output = output
-
-   self.step = self.step + 1
-   self.gradPrevOutput = nil
-   self.updateGradInputStep = nil
-   self.accGradParametersStep = nil
-   -- note that we don't return the cell, just the output
-   return self.output
-end
-
-
-function GRU:getGradHiddenState(step)
-   local gradOutput
-   if step == self.step-1 then
-      gradOutput = self.userNextGradOutput or self.gradOutputs[step] or self.zeroTensor
-   else
-      gradOutput = self.gradOutputs[step]
-   end
-   return gradOutput
-end
-
-function GRU:setGradHiddenState(step, gradHiddenState)
-   assert(torch.isTensor(gradHiddenState))
-   self.gradOutputs[step] = gradHiddenState
+   return output
 end
 
 function GRU:_updateGradInput(input, gradOutput)
@@ -201,16 +149,16 @@ function GRU:_updateGradInput(input, gradOutput)
    assert(step >= 1)
 
    -- set the output/gradOutput states of current Module
-   local recurrentModule = self:getStepModule(step)
+   local stepmodule = self:getStepModule(step)
 
    -- backward propagate through this step
-   local _gradOutput = self:getGradHiddenState(step)
+   local _gradOutput = self:getGradHiddenState(step, input)
    assert(_gradOutput)
    self._gradOutputs[step] = nn.rnn.recursiveCopy(self._gradOutputs[step], _gradOutput)
    nn.rnn.recursiveAdd(self._gradOutputs[step], gradOutput)
    gradOutput = self._gradOutputs[step]
 
-   local gradInputTable = recurrentModule:updateGradInput({input, self:getHiddenState(step-1)}, gradOutput)
+   local gradInputTable = stepmodule:updateGradInput({input, self:getHiddenState(step-1)}, gradOutput)
 
    self:setGradHiddenState(step-1, gradInputTable[2])
 
@@ -222,11 +170,11 @@ function GRU:_accGradParameters(input, gradOutput, scale)
    assert(step >= 1)
 
    -- set the output/gradOutput states of current Module
-   local recurrentModule = self:getStepModule(step)
+   local stepmodule = self:getStepModule(step)
 
    -- backward propagate through this step
    local gradOutput = self._gradOutputs[step] or self:getGradHiddenState(step)
-   recurrentModule:accGradParameters({input, self:getHiddenState(step-1)}, gradOutput, scale)
+   stepmodule:accGradParameters({input, self:getHiddenState(step-1)}, gradOutput, scale)
 end
 
 function GRU:__tostring__()
@@ -249,3 +197,63 @@ function GRU:migrate(params)
    _params[8]:copy(params[5])
    _params[9]:copy(params[6])
 end
+
+function GRU:initZeroTensor(input)
+   if input then
+      if input:dim() == 2 then
+         self.zeroTensor:resize(input:size(1), self.outputSize):zero()
+      else
+         self.zeroTensor:resize(self.outputSize):zero()
+      end
+   end
+end
+
+function GRU:getHiddenState(step, input)
+   step = step == nil and (self.step - 1) or (step < 0) and (self.step - step - 1) or step
+   local prevOutput
+   if step == 0 then
+      if self.startState then
+         prevOutput = self.startState
+      else
+         prevOutput = self.zeroTensor
+         self:initZeroTensor(input)
+      end
+   else
+      -- previous output and cell of this module
+      prevOutput = self.outputs[step]
+   end
+   return prevOutput
+end
+
+function GRU:setHiddenState(step, hiddenState)
+   step = step == nil and (self.step - 1) or (step < 0) and (self.step - step - 1) or step
+   assert(torch.isTensor(hiddenState))
+   if step == 0 then
+      self:setStartState(hiddenState)
+   else
+      self.outputs[step] = hiddenState
+   end
+end
+
+function GRU:getGradHiddenState(step, input)
+   local _step = self.updateGradInputStep or self.step
+   step = step == nil and (_step - 1) or (step < 0) and (_step - step - 1) or step
+   local gradOutput
+   if step == self.step-1 and not self.gradOutputs[step] then
+      if self.startState then
+         self:initZeroTensor(input)
+      end
+      gradOutput = self.zeroTensor
+   else
+      gradOutput = self.gradOutputs[step]
+   end
+   return gradOutput
+end
+
+function GRU:setGradHiddenState(step, gradHiddenState)
+   local _step = self.updateGradInputStep or self.step
+   step = step == nil and (_step - 1) or (step < 0) and (_step - step - 1) or step
+   assert(torch.isTensor(gradHiddenState))
+   self.gradOutputs[step] = gradHiddenState
+end
+

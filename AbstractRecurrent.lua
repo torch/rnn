@@ -1,14 +1,13 @@
 local _ = require 'moses'
-
-assert(not nn.AbstractRecurrent, "update nnx package : luarocks install nnx")
 local AbstractRecurrent, parent = torch.class('nn.AbstractRecurrent', 'nn.Container')
 
 AbstractRecurrent.dpnn_stepclone = true
 
-function AbstractRecurrent:__init(rho)
+function AbstractRecurrent:__init(stepmodule)
    parent.__init(self)
 
-   self.rho = rho or 99999 --the maximum number of time steps to BPTT
+   assert(torch.isTypeOf(stepmodule, 'nn.Module'), torch.type(self).." expecting nn.Module instance at arg 1")
+   self.seqlen = 99999 --the maximum number of time steps to BPTT
 
    self.outputs = {}
    self.gradInputs = {}
@@ -18,27 +17,25 @@ function AbstractRecurrent:__init(rho)
    self.step = 1
 
    -- stores internal states of Modules at different time-steps
-   self.sharedClones = {}
-
-   self:reset()
+   self.modules[1] = stepmodule
+   self.sharedClones = {stepmodule}
 end
 
 function AbstractRecurrent:getStepModule(step)
-   local _ = require 'moses'
-   assert(step, "expecting step at arg 1")
-   local recurrentModule = self.sharedClones[step]
-   if not recurrentModule then
-      recurrentModule = self.recurrentModule:stepClone()
-      self.sharedClones[step] = recurrentModule
+   step = step or 1
+   local stepmodule = self.sharedClones[step]
+   if not stepmodule then
+      stepmodule = self.modules[1]:stepClone()
+      self.sharedClones[step] = stepmodule
       self.nSharedClone = _.size(self.sharedClones)
    end
-   return recurrentModule
+   return stepmodule
 end
 
 function AbstractRecurrent:maskZero(nInputDim)
-   self.recurrentModule = nn.MaskZero(self.recurrentModule, nInputDim, true)
-   self.sharedClones = {self.recurrentModule}
-   self.modules[1] = self.recurrentModule
+   local stepmodule = nn.MaskZero(self.modules[1], nInputDim, true)
+   self.sharedClones = {stepmodule}
+   self.modules[1] = stepmodule
    return self
 end
 
@@ -46,10 +43,24 @@ function AbstractRecurrent:trimZero(nInputDim)
    if torch.typename(self)=='nn.GRU' and self.p ~= 0 then
       assert(self.mono, "TrimZero for BGRU needs `mono` option.")
    end
-   self.recurrentModule = nn.TrimZero(self.recurrentModule, nInputDim, true)
-   self.sharedClones = {self.recurrentModule}
-   self.modules[1] = self.recurrentModule
+   local stepmodule = nn.TrimZero(self.modules[1], nInputDim, true)
+   self.sharedClones = {stepmodule}
+   self.modules[1] = stepmodule
    return self
+end
+
+function AbstractRecurrent:updateOutput(input)
+   -- feed-forward for one time-step
+   self.output = self:_updateOutput(input)
+
+   self.outputs[self.step] = self.output
+
+   self.step = self.step + 1
+   self.gradPrevOutput = nil
+   self.updateGradInputStep = nil
+   self.accGradParametersStep = nil
+
+   return self.output
 end
 
 function AbstractRecurrent:updateGradInput(input, gradOutput)
@@ -77,23 +88,19 @@ end
 
 -- goes hand in hand with the next method : forget()
 -- this methods brings the oldest memory to the current step
-function AbstractRecurrent:recycle(offset)
-   -- offset can be used to skip initialModule (if any)
-   offset = offset or 0
-
-   local _ = require 'moses'
+function AbstractRecurrent:recycle()
    self.nSharedClone = self.nSharedClone or _.size(self.sharedClones)
 
-   local rho = math.max(self.rho + 1, self.nSharedClone)
+   local seqlen = math.max(self.seqlen + 1, self.nSharedClone)
    if self.sharedClones[self.step] == nil then
-      self.sharedClones[self.step] = self.sharedClones[self.step-rho]
-      self.sharedClones[self.step-rho] = nil
-      self._gradOutputs[self.step] = self._gradOutputs[self.step-rho]
-      self._gradOutputs[self.step-rho] = nil
+      self.sharedClones[self.step] = self.sharedClones[self.step-seqlen]
+      self.sharedClones[self.step-seqlen] = nil
+      self._gradOutputs[self.step] = self._gradOutputs[self.step-seqlen]
+      self._gradOutputs[self.step-seqlen] = nil
    end
 
-   self.outputs[self.step-rho-1] = nil
-   self.gradInputs[self.step-rho-1] = nil
+   self.outputs[self.step-seqlen-1] = nil
+   self.gradInputs[self.step-seqlen-1] = nil
 
    return self
 end
@@ -105,15 +112,19 @@ function nn.AbstractRecurrent:clearState()
    for i, clone in ipairs(self.sharedClones) do
       clone:clearState()
    end
-   self.recurrentModule:clearState()
+   self.modules[1]:clearState()
    return parent.clearState(self)
+end
+
+-- sets the starting hidden state at time t=0 (that is h[0])
+function AbstractRecurrent:setStartState(startState)
+   self.startState = startState
 end
 
 -- this method brings all the memory back to the start
 function AbstractRecurrent:forget()
-   -- the recurrentModule may contain an AbstractRecurrent instance (issue 107)
+   -- the stepmodule may contain an AbstractRecurrent instance (issue 107)
    parent.forget(self)
-   local _ = require 'moses'
 
     -- bring all states back to the start of the sequence buffers
    if self.train ~= false then
@@ -133,11 +144,11 @@ function AbstractRecurrent:forget()
 
    if not self.rmInSharedClones then
       -- Asserts that issue 129 is solved. In forget as it is often called.
-      -- Asserts that self.recurrentModule is part of the sharedClones.
+      -- Asserts that self.modules[1] is part of the sharedClones.
       -- Since its used for evaluation, it should be used for training.
       local nClone, maxIdx = 0, 1
       for k,v in pairs(self.sharedClones) do -- to prevent odd bugs
-         if torch.pointer(v) == torch.pointer(self.recurrentModule) then
+         if torch.pointer(v) == torch.pointer(self.modules[1]) then
             self.rmInSharedClones = true
             maxIdx = math.max(k, maxIdx)
          end
@@ -145,10 +156,10 @@ function AbstractRecurrent:forget()
       end
       if nClone > 1 then
          if not self.rmInSharedClones then
-            print"WARNING : recurrentModule should be added to sharedClones in constructor."
+            print"WARNING : modules[1] should be added to sharedClones in constructor."
             print"Adding it for you."
-            assert(torch.type(self.sharedClones[maxIdx]) == torch.type(self.recurrentModule))
-            self.recurrentModule = self.sharedClones[maxIdx]
+            assert(torch.type(self.sharedClones[maxIdx]) == torch.type(self.modules[1]))
+            self.modules[1] = self.sharedClones[maxIdx]
             self.rmInSharedClones = true
          end
       end
@@ -226,8 +237,8 @@ function AbstractRecurrent:setOutputStep(step)
    self.gradInput = self.gradInputs[step]
 end
 
-function AbstractRecurrent:maxBPTTstep(rho)
-   self.rho = rho
+function AbstractRecurrent:maxBPTTstep(seqlen)
+   self.seqlen = seqlen
 end
 
 -- get stored hidden state: h[t] where h[t] = f(x[t], h[t-1])
@@ -257,28 +268,6 @@ AbstractRecurrent.recursiveCopy = rnn.recursiveCopy
 AbstractRecurrent.recursiveAdd = rnn.recursiveAdd
 AbstractRecurrent.recursiveTensorEq = rnn.recursiveTensorEq
 AbstractRecurrent.recursiveNormal = rnn.recursiveNormal
-
-
-
-function AbstractRecurrent:backwardThroughTime(step, rho)
-   error"DEPRECATED Jan 8, 2016"
-end
-
-function AbstractRecurrent:updateGradInputThroughTime(step, rho)
-   error"DEPRECATED Jan 8, 2016"
-end
-
-function AbstractRecurrent:accGradParametersThroughTime(step, rho)
-   error"DEPRECATED Jan 8, 2016"
-end
-
-function AbstractRecurrent:accUpdateGradParametersThroughTime(lr, step, rho)
-   error"DEPRECATED Jan 8, 2016"
-end
-
-function AbstractRecurrent:backwardUpdateThroughTime(learningRate)
-   error"DEPRECATED Jan 8, 2016"
-end
 
 function AbstractRecurrent:__tostring__()
    if self.inputSize and self.outputSize then

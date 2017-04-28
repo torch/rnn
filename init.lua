@@ -4,7 +4,7 @@ require 'nn'
 
 -- create global rnn table:
 rnn = {}
-rnn.version = 2.4 -- merge dpnn
+rnn.version = 2.5 -- AbstractRecurrent(rho) -> AbstractRecurrent(module)
 
 -- lua 5.2 compat
 
@@ -147,7 +147,6 @@ require('rnn.MaskZeroCriterion')
 -- deprecated modules
 require('rnn.LSTM')
 require('rnn.FastLSTM')
-require('rnn.Recurrent')
 require('rnn.SeqLSTMP')
 
 -- prevent likely name conflicts

@@ -26,23 +26,23 @@ function tests.testForward()
 
   -- Do a naive forward pass
   local naive_h = torch.Tensor(N, T, H)
-  
+
 
   -- Unpack weight, bias for each gate
   local Wxu = gru.weight[{{1, D}, {1, H}}]
   local Wxr = gru.weight[{{1, D}, {H + 1, 2 * H}}]
   local Wxhc = gru.weight[{{1, D}, {2 * H + 1, 3 * H}}]
-  
-  
+
+
   local Whu = gru.weight[{{D + 1, D + H}, {1, H}}]
   local Whr = gru.weight[{{D + 1, D + H}, {H + 1, 2 * H}}]
   local Whhc = gru.weight[{{D + 1, D + H}, {2 * H + 1, 3 * H}}]
-  
-  
+
+
   local bu = gru.bias[{{1, H}}]:view(1, H):expand(N, H)
   local br = gru.bias[{{H + 1, 2 * H}}]:view(1, H):expand(N, H)
   local bhc = gru.bias[{{2 * H + 1, 3 * H}}]:view(1, H):expand(N, H)
-  
+
 
   local prev_h = h0:clone()
   for t = 1, T do
@@ -51,9 +51,9 @@ function tests.testForward()
     local r = torch.sigmoid(torch.mm(xt, Wxr) + torch.mm(prev_h, Whr) + br)
     local hc = torch.tanh(torch.mm(xt, Wxhc) + torch.mm(torch.cmul(prev_h,r), Whhc) + bhc)
     local next_h = torch.cmul(hc, u) + prev_h - torch.cmul(prev_h, u)
-    
+
     naive_h[{{}, t}] = next_h
-    
+
     prev_h = next_h
   end
 
@@ -66,8 +66,8 @@ function tests.gradcheck()
 
   local x = torch.randn(N, T, D)
   local h0 = torch.randn(N, H)
-  
-  
+
+
   local gru = nn.GRU(D, H)
   local h = gru:forward{h0, x}
 
@@ -99,7 +99,7 @@ function tests.gradcheck()
 
   local dx_num = gradcheck.numeric_gradient(fx, x, dh)
   local dh0_num = gradcheck.numeric_gradient(fh0, h0, dh)
-  
+
   local dw_num = gradcheck.numeric_gradient(fw, gru.weight, dh)
   local db_num = gradcheck.numeric_gradient(fb, gru.bias, dh)
 
@@ -110,7 +110,7 @@ function tests.gradcheck()
   local db_error = gradcheck.relative_error(db_num, db)
 
   tester:assertle(dh0_error, 1e-4)
-  
+
   tester:assertle(dx_error, 1e-5)
   tester:assertle(dw_error, 1e-4)
   tester:assertle(db_error, 1e-5)

@@ -9,15 +9,14 @@
 -- The first input in sequence uses zero value for cell and hidden state
 
 -- For p > 0, it becomes Bayesian GRUs [Gal, 2015].
--- In this case, please do not dropout on input as BGRUs handle the input with 
--- its own dropouts. First, try 0.25 for p as Gal (2016) suggested, 
--- presumably, because of summations of two parts in GRUs connections. 
+-- In this case, please do not dropout on input as BGRUs handle the input with
+-- its own dropouts. First, try 0.25 for p as Gal (2016) suggested,
+-- presumably, because of summations of two parts in GRUs connections.
 ------------------------------------------------------------------------
 assert(not nn.LSTM, "update nnx package : luarocks install nnx")
 local LSTM, parent = torch.class('nn.LSTM', 'nn.AbstractRecurrent')
 
 function LSTM:__init(inputSize, outputSize, rho, cell2gate, p, mono)
-   parent.__init(self, rho or 9999)
    self.p = p or 0
    if p and p ~= 0 then
       assert(nn.Dropout(p,false,false,true).lazy, 'only work with Lazy Dropout!')
@@ -27,10 +26,9 @@ function LSTM:__init(inputSize, outputSize, rho, cell2gate, p, mono)
    self.outputSize = outputSize or inputSize
    -- build the model
    self.cell2gate = (cell2gate == nil) and true or cell2gate
-   self.recurrentModule = self:buildModel()
-   -- make it work with nn.Container
-   self.modules[1] = self.recurrentModule
-   self.sharedClones[1] = self.recurrentModule
+
+   local stepmodule = self:buildModel()
+   parent.__init(self, stepmodule)
 
    -- for output(0), cell(0) and gradCell(T)
    self.zeroTensor = torch.Tensor()
@@ -193,11 +191,11 @@ function LSTM:updateOutput(input)
    local output, cell
    if self.train ~= false then
       self:recycle()
-      local recurrentModule = self:getStepModule(self.step)
+      local stepmodule = self:getStepModule(self.step)
       -- the actual forward propagation
-      output, cell = unpack(recurrentModule:updateOutput{input, prevOutput, prevCell})
+      output, cell = unpack(stepmodule:updateOutput{input, prevOutput, prevCell})
    else
-      output, cell = unpack(self.recurrentModule:updateOutput{input, prevOutput, prevCell})
+      output, cell = unpack(self.modules[1]:updateOutput{input, prevOutput, prevCell})
    end
 
    self.outputs[self.step] = output
@@ -246,7 +244,7 @@ function LSTM:_updateGradInput(input, gradOutput)
    assert(step >= 1)
 
    -- set the output/gradOutput states of current Module
-   local recurrentModule = self:getStepModule(step)
+   local stepmodule = self:getStepModule(step)
 
    -- backward propagate through this step
    local gradHiddenState = self:getGradHiddenState(step)
@@ -260,7 +258,7 @@ function LSTM:_updateGradInput(input, gradOutput)
    local inputTable = self:getHiddenState(step-1)
    table.insert(inputTable, 1, input)
 
-   local gradInputTable = recurrentModule:updateGradInput(inputTable, {gradOutput, gradCell})
+   local gradInputTable = stepmodule:updateGradInput(inputTable, {gradOutput, gradCell})
 
    local _ = require 'moses'
    self:setGradHiddenState(step-1, _.slice(gradInputTable, 2, 3))
@@ -273,14 +271,14 @@ function LSTM:_accGradParameters(input, gradOutput, scale)
    assert(step >= 1)
 
    -- set the output/gradOutput states of current Module
-   local recurrentModule = self:getStepModule(step)
+   local stepmodule = self:getStepModule(step)
 
    -- backward propagate through this step
    local inputTable = self:getHiddenState(step-1)
    table.insert(inputTable, 1, input)
    local gradOutputTable = self:getGradHiddenState(step)
    gradOutputTable[1] = self._gradOutputs[step] or gradOutputTable[1]
-   recurrentModule:accGradParameters(inputTable, gradOutputTable, scale)
+   stepmodule:accGradParameters(inputTable, gradOutputTable, scale)
 end
 
 function LSTM:clearState()

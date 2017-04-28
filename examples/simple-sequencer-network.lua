@@ -7,7 +7,6 @@ hiddenSize = 7
 nIndex = 10
 lr = 0.1
 
-
 local rnn = nn.Sequential()
    :add(nn.LookupRNN(nIndex, hiddenSize))
    :add(nn.Linear(hiddenSize, nIndex))

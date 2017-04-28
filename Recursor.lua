@@ -6,33 +6,18 @@
 ------------------------------------------------------------------------
 local Recursor, parent = torch.class('nn.Recursor', 'nn.AbstractRecurrent')
 
-function Recursor:__init(module, rho)
-   parent.__init(self, rho or 9999999)
-
-   self.recurrentModule = module
-
-   self.module = module
-   self.modules = {module}
-   self.sharedClones[1] = self.recurrentModule
-end
-
-function Recursor:updateOutput(input)
+function Recursor:_updateOutput(input)
    local output
    if self.train ~= false then -- if self.train or self.train == nil then
       -- set/save the output states
       self:recycle()
-      local recurrentModule = self:getStepModule(self.step)
-      output = recurrentModule:updateOutput(input)
+      local stepmodule = self:getStepModule(self.step)
+      output = stepmodule:updateOutput(input)
    else
-      output = self.recurrentModule:updateOutput(input)
+      output = self.modules[1]:updateOutput(input)
    end
 
-   self.outputs[self.step] = output
-   self.output = output
-   self.step = self.step + 1
-   self.updateGradInputStep = nil
-   self.accGradParametersStep = nil
-   return self.output
+   return output
 end
 
 function Recursor:_updateGradInput(input, gradOutput)
@@ -40,9 +25,9 @@ function Recursor:_updateGradInput(input, gradOutput)
    local step = self.updateGradInputStep - 1
    assert(step >= 1)
 
-   local recurrentModule = self:getStepModule(step)
-   recurrentModule:setOutputStep(step)
-   local gradInput = recurrentModule:updateGradInput(input, gradOutput)
+   local stepmodule = self:getStepModule(step)
+   stepmodule:setOutputStep(step)
+   local gradInput = stepmodule:updateGradInput(input, gradOutput)
 
    return gradInput
 end
@@ -51,9 +36,9 @@ function Recursor:_accGradParameters(input, gradOutput, scale)
    local step = self.accGradParametersStep - 1
    assert(step >= 1)
 
-   local recurrentModule = self:getStepModule(step)
-   recurrentModule:setOutputStep(step)
-   recurrentModule:accGradParameters(input, gradOutput, scale)
+   local stepmodule = self:getStepModule(step)
+   stepmodule:setOutputStep(step)
+   stepmodule:accGradParameters(input, gradOutput, scale)
 end
 
 function Recursor:includingSharedClones(f)
@@ -78,9 +63,9 @@ function Recursor:forget(offset)
    return self
 end
 
-function Recursor:maxBPTTstep(rho)
-   self.rho = rho
-   nn.Module.maxBPTTstep(self, rho)
+function Recursor:maxBPTTstep(seqlen)
+   self.seqlen = seqlen
+   nn.Module.maxBPTTstep(self, seqlen)
 end
 
 function Recursor:getHiddenState(...)
@@ -97,6 +82,10 @@ end
 
 function Recursor:setGradHiddenState(...)
    return self.modules[1]:setGradHiddenState(...)
+end
+
+function Recursor:setStartState(...)
+   return self.modules[1]:setStartState(...)
 end
 
 Recursor.__tostring__ = nn.Decorator.__tostring__

@@ -4,27 +4,21 @@
 -- Unlike Recurrent, this module doesn't manage a separate input layer,
 -- nor does it have a startModule. Instead for the first step, it
 -- just forwards a zero tensor through the recurrent layer (like LSTM).
--- The recurrentModule should output Tensor or table : output(t)
+-- The stepmodule should output Tensor or table : output(t)
 -- given input table : {input(t), output(t-1)}
 ------------------------------------------------------------------------
 local _ = require 'moses'
 local Recurrence, parent = torch.class('nn.Recurrence', 'nn.AbstractRecurrent')
 
-function Recurrence:__init(recurrentModule, outputSize, nInputDim, rho)
-   parent.__init(self, rho or 9999)
+function Recurrence:__init(stepmodule, outputSize, nInputDim)
+   parent.__init(self, stepmodule)
 
    assert(_.contains({'table','torch.LongStorage','number'}, torch.type(outputSize)), "Unsupported size type")
    self.outputSize = torch.type(outputSize) == 'number' and {outputSize} or outputSize
    -- for table outputs, this is the number of dimensions in the first (left) tensor (depth-first).
    assert(torch.type(nInputDim) == 'number', "Expecting nInputDim number for arg 2")
    self.nInputDim = nInputDim
-   assert(torch.isTypeOf(recurrentModule, 'nn.Module'), "Expecting recurrenModule nn.Module for arg 3")
-   self.recurrentModule = recurrentModule
-
-   -- make it work with nn.Container and nn.Decorator
-   self.module = self.recurrentModule
-   self.modules[1] = self.recurrentModule
-   self.sharedClones[1] = self.recurrentModule
+   assert(torch.isTypeOf(stepmodule, 'nn.Module'), "Expecting stepmodule nn.Module for arg 3")
 
    -- just so we can know the type of this module
    self.typeTensor = torch.Tensor()
@@ -80,79 +74,22 @@ function Recurrence:getBatchSize(input, nInputDim)
    end
 end
 
-function Recurrence:getHiddenState(step, input)
-   local prevOutput
-   if step == 0 then
-      if input then
-         -- first previous output is zeros
-         local batchSize = self:getBatchSize(input)
-         self.zeroTensor = self:recursiveResizeZero(self.zeroTensor, self.outputSize, batchSize)
-      end
-      prevOutput = self.userPrevOutput or self.outputs[step] or self.zeroTensor
-   else
-      -- previous output of this module
-      prevOutput = self.outputs[step]
-   end
-   -- call getHiddenState on recurrentModule as they may contain AbstractRecurrent instances...
-   return {prevOutput, nn.Container.getHiddenState(self, step)}
-end
-
-function Recurrence:setHiddenState(step, hiddenState)
-   assert(torch.type(hiddenState) == 'table')
-   assert(#hiddenState >= 1)
-   self.outputs[step] = hiddenState[1]
-
-   if hiddenState[2] then
-      -- call setHiddenState on recurrentModule as they may contain AbstractRecurrent instances...
-      nn.Container.setHiddenState(self, step, hiddenState[2])
-   end
-end
-
-function Recurrence:updateOutput(input)
+function Recurrence:_updateOutput(input)
    -- output(t-1)
    local prevOutput = self:getHiddenState(self.step-1, input)[1]
 
-   -- output(t) = recurrentModule{input(t), output(t-1)}
+   -- output(t) = stepmodule:forward{input(t), output(t-1)}
    local output
    if self.train ~= false then
       self:recycle()
-      local recurrentModule = self:getStepModule(self.step)
+      local stepmodule = self:getStepModule(self.step)
       -- the actual forward propagation
-      output = recurrentModule:updateOutput{input, prevOutput}
+      output = stepmodule:updateOutput{input, prevOutput}
    else
-      output = self.recurrentModule:updateOutput{input, prevOutput}
+      output = self.modules[1]:updateOutput{input, prevOutput}
    end
 
-   self.outputs[self.step] = output
-
-   self.output = output
-
-   self.step = self.step + 1
-   self.gradPrevOutput = nil
-   self.updateGradInputStep = nil
-   self.accGradParametersStep = nil
-
-   return self.output
-end
-
-function Recurrence:getGradHiddenState(step)
-   local gradOutput
-   if step == self.step-1 then
-      gradOutput = self.userNextGradOutput or self.gradOutputs[step] or self.zeroTensor
-   else
-      gradOutput = self.gradOutputs[step]
-   end
-   return {gradOutput, nn.Container.getGradHiddenState(self, step)}
-end
-
-function Recurrence:setGradHiddenState(step, gradHiddenState)
-   assert(torch.type(gradHiddenState) == 'table')
-   assert(#gradHiddenState >= 1)
-
-   self.gradOutputs[step] = gradHiddenState[1]
-   if gradHiddenState[2] then
-      nn.Container.setGradHiddenState(self, step, gradHiddenState[2])
-   end
+   return output
 end
 
 function Recurrence:_updateGradInput(input, gradOutput)
@@ -161,15 +98,15 @@ function Recurrence:_updateGradInput(input, gradOutput)
    assert(step >= 1)
 
    -- set the output/gradOutput states of current Module
-   local recurrentModule = self:getStepModule(step)
+   local stepmodule = self:getStepModule(step)
 
    -- backward propagate through this step
-   local _gradOutput = self:getGradHiddenState(step)[1]
+   local _gradOutput = self:getGradHiddenState(step, input)[1]
    self._gradOutputs[step] = nn.rnn.recursiveCopy(self._gradOutputs[step], _gradOutput)
    nn.rnn.recursiveAdd(self._gradOutputs[step], gradOutput)
    gradOutput = self._gradOutputs[step]
 
-   local gradInputTable = recurrentModule:updateGradInput({input, self:getHiddenState(step-1)[1]}, gradOutput)
+   local gradInputTable = stepmodule:updateGradInput({input, self:getHiddenState(step-1)[1]}, gradOutput)
 
    local _ = require 'moses'
    self:setGradHiddenState(step-1, _.slice(gradInputTable, 2, #gradInputTable))
@@ -181,11 +118,81 @@ function Recurrence:_accGradParameters(input, gradOutput, scale)
    local step = self.accGradParametersStep - 1
    assert(step >= 1)
 
-   local recurrentModule = self:getStepModule(step)
+   local stepmodule = self:getStepModule(step)
 
    -- backward propagate through this step
    local gradOutput = self._gradOutputs[step] or self:getGradHiddenState(step)[1]
-   recurrentModule:accGradParameters({input, self:getHiddenState(step-1)[1]}, gradOutput, scale)
+   stepmodule:accGradParameters({input, self:getHiddenState(step-1)[1]}, gradOutput, scale)
 end
 
 Recurrence.__tostring__ = nn.Decorator.__tostring__
+
+function Recurrence:getHiddenState(step, input)
+   step = step == nil and (self.step - 1) or (step < 0) and (self.step - step - 1) or step
+   local prevOutput
+   if step == 0 then
+      if self.startState then
+         prevOutput = self.startState
+      else
+         if input then
+            -- first previous output is zeros
+            local batchSize = self:getBatchSize(input)
+            self.zeroTensor = self:recursiveResizeZero(self.zeroTensor, self.outputSize, batchSize)
+         end
+         prevOutput = self.outputs[step] or self.zeroTensor
+      end
+   else
+      -- previous output of this module
+      prevOutput = self.outputs[step]
+   end
+   -- call getHiddenState on stepmodule as they may contain AbstractRecurrent instances...
+   return {prevOutput, nn.Container.getHiddenState(self, step)}
+end
+
+function Recurrence:setHiddenState(step, hiddenState)
+   step = step == nil and (self.step - 1) or (step < 0) and (self.step - step - 1) or step
+   assert(torch.type(hiddenState) == 'table')
+   assert(#hiddenState >= 1)
+
+   if step == 0 then
+      self:setStartState(hiddenState[1])
+   else
+      self.outputs[step] = hiddenState[1]
+   end
+
+   if hiddenState[2] then
+      -- call setHiddenState on stepmodule as they may contain AbstractRecurrent instances...
+      nn.Container.setHiddenState(self, step, hiddenState[2])
+   end
+end
+
+function Recurrence:getGradHiddenState(step, input)
+   local _step = self.updateGradInputStep or self.step
+   step = step == nil and (_step - 1) or (step < 0) and (_step - step - 1) or step
+
+   local gradOutput
+   if step == self.step-1 and not self.gradOutputs[step] then
+      if self.startState then
+         local batchSize = self:getBatchSize(input)
+         self.zeroTensor = self:recursiveResizeZero(self.zeroTensor, self.outputSize, batchSize)
+      end
+      gradOutput = self.zeroTensor
+   else
+      gradOutput = self.gradOutputs[step]
+   end
+   return {gradOutput, nn.Container.getGradHiddenState(self, step)}
+end
+
+function Recurrence:setGradHiddenState(step, gradHiddenState)
+   local _step = self.updateGradInputStep or self.step
+   step = step == nil and (_step - 1) or (step < 0) and (_step - step - 1) or step
+
+   assert(torch.type(gradHiddenState) == 'table')
+   assert(#gradHiddenState >= 1)
+
+   self.gradOutputs[step] = gradHiddenState[1]
+   if gradHiddenState[2] then
+      nn.Container.setGradHiddenState(self, step, gradHiddenState[2])
+   end
+end
+

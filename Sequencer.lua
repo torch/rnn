@@ -46,7 +46,7 @@ function Sequencer:updateOutput(input)
       nStep = #input
    end
 
-   -- Note that the Sequencer hijacks the rho attribute of the rnn
+   -- Note that the Sequencer hijacks the seqlen attribute of the rnn
    self.module:maxBPTTstep(nStep)
    if self.train ~= false then
       -- TRAINING
