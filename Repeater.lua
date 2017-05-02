@@ -25,7 +25,7 @@ function Repeater:updateOutput(input)
    self.module:forget()
    -- TODO make copy outputs optional
    for step=1,self.seqlen do
-      self.output[step] = nn.rnn.recursiveCopy(self.output[step], self.module:updateOutput(input))
+      self.output[step] = nn.utils.recursiveCopy(self.output[step], self.module:updateOutput(input))
    end
    return self.output
 end
@@ -39,9 +39,9 @@ function Repeater:updateGradInput(input, gradOutput)
    for step=self.seqlen,1,-1 do
       local gradInput = self.module:updateGradInput(input, gradOutput[step])
       if step == self.seqlen then
-         self.gradInput = nn.rnn.recursiveCopy(self.gradInput, gradInput)
+         self.gradInput = nn.utils.recursiveCopy(self.gradInput, gradInput)
       else
-         nn.rnn.recursiveAdd(self.gradInput, gradInput)
+         nn.utils.recursiveAdd(self.gradInput, gradInput)
       end
    end
 

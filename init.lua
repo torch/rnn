@@ -4,7 +4,7 @@ require 'nn'
 
 -- create global rnn table:
 rnn = {}
-rnn.version = 2.5 -- AbstractRecurrent(rho) -> AbstractRecurrent(module)
+rnn.version = 2.6 -- zero-masking v2 : setZeroMask(zeroMask)
 
 -- lua 5.2 compat
 
@@ -24,7 +24,6 @@ paths.require 'librnn'
 
 unpack = unpack or table.unpack
 
-require('rnn.recursiveUtils')
 require('rnn.utils')
 
 -- extensions to existing nn.Module
@@ -140,6 +139,7 @@ require('rnn.SeqReverseSequence')
 require('rnn.SeqBRNN')
 
 -- recurrent criterions:
+require('rnn.AbstractSequencerCriterion')
 require('rnn.SequencerCriterion')
 require('rnn.RepeaterCriterion')
 require('rnn.MaskZeroCriterion')
