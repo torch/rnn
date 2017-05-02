@@ -1192,20 +1192,25 @@ This lookup table makes it possible to pad sequences with different lengths in t
 
 <a name='rnn.MaskZeroCriterion'></a>
 ## MaskZeroCriterion ##
-This criterion zeroes the `err` and `gradInput` rows of the decorated criterion
-for commensurate `input` rows which are tensors of zeros.
+
+This criterion ignores samples (rows in the `input` and `target` tensors)
+where the `zeroMask` ByteTensor passed to `MaskZeroCriterion:setZeroMask(zeroMask)` is 1.
+This criterion only supports batch-mode.
 
 ```lua
-mzc = nn.MaskZeroCriterion(criterion, nInputDim)
+batchsize = 3
+zeroMask = torch.ByteTensor(batchsize):zero()
+zeroMask[2] = 1 -- the 2nd sample in batch is ignored
+mzc = nn.MaskZeroCriterion(criterion)
+mzc:setZeroMask(zeroMask)
+loss = mzc:forward(input, target)
+gradInput = mzc:backward(input, target)
+assert(gradInput[2]:sum() == 0)
 ```
 
-The `gradInput` Tensor (or table thereof) of the decorated `criterion`
-will have each row (samples) zeroed when the commensurate row of the `input`
-is a tensor of zeros. The `err` will also disregard such zero rows.
-
-The `nInputDim` argument must specify the number of non-batch dims
-in the first Tensor of the `input`. In the case of an `input` table,
-the first Tensor is the first one encountered when doing a depth-first search.
+In the above example, the second row of the `gradInput` Tensor is zero.
+This is because the commensurate row in the `zeroMask` is a one.
+The call to `forward` also disregards the second sample in measuring the `loss`.
 
 This decorator makes it possible to pad sequences with different lengths in the same batch with zero vectors.
 

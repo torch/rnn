@@ -15,6 +15,7 @@ SET(luasrc
   init.lua
   AbstractRecurrent.lua
   AbstractSequencer.lua
+  AbstractSequencerCriterion.lua
   BiSequencer.lua
   BiSequencerLM.lua
   CopyGrad.lua
@@ -33,7 +34,6 @@ SET(luasrc
   Padding.lua
   Recurrence.lua
   RecurrentAttention.lua
-  recursiveUtils.lua
   Recursor.lua
   Repeater.lua
   RepeaterCriterion.lua

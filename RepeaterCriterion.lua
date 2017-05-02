@@ -4,59 +4,57 @@
 -- same target (the target is repeated).
 -- Useful for nn.Repeater and nn.Sequencer.
 ------------------------------------------------------------------------
-assert(not nn.RepeaterCriterion, "update nnx package : luarocks install nnx")
-local RepeaterCriterion, parent = torch.class('nn.RepeaterCriterion', 'nn.Criterion')
+local RepeaterCriterion, parent = torch.class('nn.RepeaterCriterion', 'nn.AbstractSequencerCriterion')
 
-function RepeaterCriterion:__init(criterion)
-   parent.__init(self)
-   self.criterion = criterion
-   self.gradInput = {}
-   self.clones = {}
-end
-
-RepeaterCriterion.getStepCriterion = nn.SequencerCriterion.getStepCriterion
-
-function RepeaterCriterion:forward(input, target)
+function RepeaterCriterion:updateOutput(input, target)
    self.output = 0
-   local nStep
+   local seqlen
    if torch.isTensor(input) then
-      nStep = input:size(1)
+      seqlen = input:size(1)
    else
-      nStep = #input
+      seqlen = #input
    end
 
-   
-   for i=1,nStep do
+   for i=1,seqlen do
       local criterion = self:getStepCriterion(i)
       self.output = self.output + criterion:forward(input[i], target)
    end
-   
+
+
+   if self.sizeAverage then
+      self.output = self.output / seqlen
+   end
+
    return self.output
 end
 
-function RepeaterCriterion:backward(input, target)
+function RepeaterCriterion:updateGradInput(input, target)
    self.gradInput = {}
    if torch.isTensor(input) then
-      nStep = input:size(1)
+      seqlen = input:size(1)
    else
-      nStep = #input
+      seqlen = #input
    end
-   
+
    local tableGradInput = {}
-   for i=1,nStep do
+   for i=1,seqlen do
       local criterion = self:getStepCriterion(i)
       tableGradInput[i] = criterion:backward(input[i], target)
    end
-   
+
+   if self.sizeAverage then
+      nn.utils.recursiveDiv(tableGradInput[i], seqlen)
+   end
+
    if torch.isTensor(input) then
       self.gradInput = tableGradInput[1].new()
-      self.gradInput:resize(nStep, unpack(tableGradInput[1]:size():totable()))
-      for step=1,nStep do
+      self.gradInput:resize(seqlen, unpack(tableGradInput[1]:size():totable()))
+      for step=1,seqlen do
          self.gradInput[step]:copy(tableGradInput[step])
       end
    else
       self.gradInput = tableGradInput
    end
-   
+
    return self.gradInput
 end

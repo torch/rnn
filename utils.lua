@@ -189,11 +189,11 @@ function nn.utils.recursiveDiv(tensor, scalar)
    end
 end
 
-function nn.utils.recursiveIndex(dst, src, indices)
+function nn.utils.recursiveIndex(dst, src, dim, indices)
    if torch.type(src) == 'table' then
       dst = torch.type(dst) == 'table' and dst or {}
       for k,v in ipairs(src) do
-         dst[k] = nn.utils.recursiveIndex(dst[k], v, indices)
+         dst[k] = nn.utils.recursiveIndex(dst[k], v, dim, indices)
       end
       for i=#src+1,#dst do
          dst[i] = nil
@@ -202,30 +202,65 @@ function nn.utils.recursiveIndex(dst, src, indices)
       assert(torch.isTensor(src))
       dst = torch.isTensor(dst) and dst or src.new()
 
-      dst:index(src, 1, indices)
+      dst:index(src, dim, indices)
    end
    return dst
 end
+nn.utils.recursiveIndexSelect = nn.utils.recursiveIndex
 
-function nn.utils.recursiveIndexCopy(dst, indices, src)
+function nn.utils.recursiveIndexCopy(dst, dim, indices, src)
    if torch.type(src) == 'table' then
       dst = (torch.type(dst) == 'table') and dst or {dst}
       for key,src_ in pairs(src) do
-         dst[key] = self:recursiveMaskGradInput(dst[key], indices, src_)
+         dst[key] = nn.utils.recursiveIndexCopy(dst[key], dim, indices, src_)
       end
       for i=#src+1,#dst do
          dst[i] = nil
       end
-   elseif torch.isTensor(input) then
-      dst = torch.isTensor(dst) and dst or input.new()
-      dst:resizeAs(input):zero()
-      if indices:nElement() > 0 then
-         assert(src)
-         dst:indexCopy(1, indices, src)
-      end
+   elseif torch.isTensor(src) then
+      assert(torch.isTensor(dst))
+      dst:indexCopy(dim, indices, src)
    else
       error("expecting nested tensors or tables. Got "..
-            torch.type(dst).." and "..torch.type(input).." instead")
+            torch.type(dst).." and "..torch.type(src).." instead")
+   end
+   return dst
+end
+
+function nn.utils.recursiveMaskedSelect(dst, src, mask)
+   if torch.type(src) == 'table' then
+      dst = (torch.type(dst) == 'table') and dst or {dst}
+      for key,src_ in pairs(src) do
+         dst[key] = nn.utils.recursiveMaskedSelect(dst[key], src_, mask)
+      end
+      for i=#src+1,#dst do
+         dst[i] = nil
+      end
+   elseif torch.isTensor(src) then
+      assert(torch.isTensor(dst))
+      dst:maskedSelect(src, mask)
+   else
+      error("expecting nested tensors or tables. Got "..
+            torch.type(dst).." and "..torch.type(src).." instead")
+   end
+   return dst
+end
+
+function nn.utils.recursiveMaskedCopy(dst, mask, src)
+   if torch.type(src) == 'table' then
+      dst = (torch.type(dst) == 'table') and dst or {dst}
+      for key,src_ in pairs(src) do
+         dst[key] = nn.utils.recursiveMaskedCopy(dst[key], mask, src_)
+      end
+      for i=#src+1,#dst do
+         dst[i] = nil
+      end
+   elseif torch.isTensor(src) then
+      assert(torch.isTensor(dst))
+      dst:maskedCopy(mask, src)
+   else
+      error("expecting nested tensors or tables. Got "..
+            torch.type(dst).." and "..torch.type(src).." instead")
    end
    return dst
 end
