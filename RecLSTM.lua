@@ -16,17 +16,18 @@ function RecLSTM:__init(inputsize, hiddensize, outputsize)
    self.zeroCell = torch.Tensor()
 end
 
-function RecLSTM:maskZero()
+function RecLSTM:maskZero(v1)
    assert(torch.isTypeOf(self.modules[1], 'nn.StepLSTM'))
    for i,stepmodule in pairs(self.sharedClones) do
-      stepmodule:maskZero()
+      stepmodule:maskZero(v1)
    end
-   self.modules[1]:maskZero()
+   self.modules[1]:maskZero(v1)
    return self
 end
 
 ------------------------- forward backward -----------------------------
 function RecLSTM:_updateOutput(input)
+   assert(input:dim() == 2, "RecLSTM expecting batchsize x inputsize tensor (Only supports batchmode)")
    local prevOutput, prevCell = unpack(self:getHiddenState(self.step-1, input))
 
    -- output(t), cell(t) = lstm{input(t), output(t-1), cell(t-1)}
@@ -185,4 +186,12 @@ function RecLSTM:setGradHiddenState(step, gradHiddenState)
 
    self.gradOutputs[step] = gradHiddenState[1]
    self.gradCells[step] = gradHiddenState[2]
+end
+
+function RecLSTM:__tostring__()
+   if self.weightO then
+       return self.__typename .. string.format("(%d -> %d -> %d)", self.inputsize, self.hiddensize, self.outputsize)
+   else
+       return self.__typename .. string.format("(%d -> %d)", self.inputsize, self.outputsize)
+   end
 end

@@ -57,8 +57,17 @@ function nn.utils.getZeroMaskSequence(sequence, zeroMask)
 
    sequence = sequence:contiguous():view(sequence:size(1), sequence:size(2), -1)
    -- build mask (1 where norm is 0 in first)
-   local _zeroMask = torch.getBuffer('getZeroMaskSequence', '_zeroMask', sequence)
+   local _zeroMask
+   if sequence.norm then
+      _zeroMask = torch.getBuffer('getZeroMaskSequence', '_zeroMask', sequence)
+   else
+      _zeroMask = torch.getBuffer('getZeroMaskSequence', '_zeroMask', 'torch.FloatTensor')
+      local _sequence = torch.getBuffer('getZeroMaskSequence', '_sequence', 'torch.FloatTensor')
+      _sequence:resize(sequence:size()):copy(sequence)
+      sequence = _sequence
+   end
    _zeroMask:norm(sequence, 2, 3)
+
    zeroMask = zeroMask or (
        (torch.type(sequence) == 'torch.CudaTensor') and torch.CudaByteTensor()
        or (torch.type(sequence) == 'torch.ClTensor') and torch.ClTensor()
@@ -161,16 +170,19 @@ function nn.utils.recursiveGetFirst(input)
 end
 
 -- in-place set tensor to zero where zeroMask is 1
-function nn.utils.recursiveZeroMask(tensor, mask)
+function nn.utils.recursiveZeroMask(tensor, zeroMask)
    if torch.type(tensor) == 'table' then
       for k,tensor_k in ipairs(tensor) do
-         nn.utils.recursiveMask(tensor_k)
+         nn.utils.recursiveZeroMask(tensor_k, zeroMask)
       end
    else
       assert(torch.isTensor(tensor))
 
       local tensorSize = tensor:size():fill(1)
       tensorSize[1] = tensor:size(1)
+      if zeroMask:dim() == 2 then
+         tensorSize[2] = tensor:size(2)
+      end
       assert(zeroMask:dim() <= tensor:dim())
       zeroMask = zeroMask:view(tensorSize):expandAs(tensor)
       -- set tensor to zero where zeroMask is 1
@@ -263,4 +275,15 @@ function nn.utils.recursiveMaskedCopy(dst, mask, src)
             torch.type(dst).." and "..torch.type(src).." instead")
    end
    return dst
+end
+
+function nn.utils.setZeroMask(modules, zeroMask, cuda)
+   if cuda then
+      cuZeroMask = torch.getBuffer('setZeroMask', 'cuZeroMask', 'torch.CudaByteTensor')
+      cuZeroMask:resize(zeroMask:size()):copy(zeroMask)
+      zeroMask = cuZeroMask
+   end
+   for i,module in ipairs(torch.type(modules) == 'table' and modules or {modules}) do
+      module:setZeroMask(zeroMask)
+   end
 end

@@ -76,6 +76,7 @@ function SeqLSTM:__init(inputsize, hiddensize, outputsize)
    -- set this to true for variable length sequences that seperate
    -- independent sequences with a step of zeros (a tensor of size D)
    self.maskzero = false
+   self.v2 = true
 end
 
 function SeqLSTM:reset(std)
@@ -88,22 +89,15 @@ function SeqLSTM:reset(std)
    return self
 end
 
--- unlike MaskZero, the mask is applied in-place
-function SeqLSTM:recursiveMask(output, mask)
-   if torch.type(output) == 'table' then
-      for k,v in ipairs(output) do
-         self:recursiveMask(output[k], mask)
+function SeqLSTM:zeroMaskState(state, step, cur_x)
+   if self.maskzero and self.zeroMask ~= false then
+      if self.v2 then
+         assert(self.zeroMask ~= nil, torch.type(self).." expecting zeroMask tensor or false")
+         nn.utils.recursiveZeroMask(state, self.zeroMask[step])
+      else -- backwards compat
+         self.zeroMask = nn.utils.getZeroMaskBatch(cur_x, self.zeroMask)
+         nn.utils.recursiveZeroMask(state, self.zeroMask)
       end
-   else
-      assert(torch.isTensor(output))
-
-      -- make sure mask has the same dimension as the output tensor
-      local outputSize = output:size():fill(1)
-      outputSize[1] = output:size(1)
-      mask:resize(outputSize)
-      -- build mask
-      local zeroMask = mask:expandAs(output)
-      output:maskedFill(zeroMask, 0)
    end
 end
 
@@ -123,11 +117,21 @@ function SeqLSTM:updateOutput(input)
    local seqlen, batchsize = input:size(1), input:size(2)
    local inputsize, hiddensize, outputsize = self.inputsize, self.hiddensize, self.outputsize
 
+   if self.maskzero and self.v2 and self.zeroMask ~= false then
+      if not torch.isTensor(self.zeroMask) then
+         error(torch.type(self).." expecting previous call to setZeroMask(zeroMask) with maskzero=true")
+      end
+      if (self.zeroMask:size(1) ~= seqlen) or (self.zeroMask:size(2) ~= batchsize) then
+         error(torch.type(self).." expecting zeroMask of size seqlen x batchsize, got "
+            ..self.zeroMask:size(1).." x "..self.zeroMask:size(2).." instead of "..seqlen.." x "..batchsize )
+      end
+   end
+
    -- remember previous state?
    local remember = self:hasMemory()
 
    local c0 = self.c0
-   if c0:nElement() == 0 or not remember then
+   if (c0:nElement() ~= batchsize * hiddensize) or not remember then
       c0:resize(batchsize, hiddensize):zero()
    elseif remember then
       assert(self.cell:size(2) == batchsize, 'batch sizes must be constant to remember states')
@@ -135,7 +139,7 @@ function SeqLSTM:updateOutput(input)
    end
 
    local h0 = self.h0
-   if h0:nElement() == 0 or not remember then
+   if (h0:nElement() ~= batchsize * outputsize) or not remember then
       h0:resize(batchsize, outputsize):zero()
    elseif remember then
       assert(self.output:size(2) == batchsize, 'batch sizes must be the same to remember states')
@@ -166,16 +170,7 @@ function SeqLSTM:updateOutput(input)
                                            next_h, next_c)
          end
 
-         if self.maskzero then
-            -- build mask from input
-            local vectorDim = cur_x:dim()
-            self._zeroMask = self._zeroMask or cur_x.new()
-            self._zeroMask:norm(cur_x, 2, vectorDim)
-            self.zeroMask = self.zeroMask or ((torch.type(cur_x) == 'torch.CudaTensor') and torch.CudaByteTensor() or torch.ByteTensor())
-            self._zeroMask.eq(self.zeroMask, self._zeroMask, 0)
-            -- zero masked output
-            self:recursiveMask({next_h, next_c, cur_gates}, self.zeroMask)
-         end
+         self:zeroMaskState({next_h, next_c, gates}, t, cur_x)
 
          prev_h, prev_c = next_h, next_c
       end
@@ -208,16 +203,7 @@ function SeqLSTM:updateOutput(input)
             next_h:mm(self._hidden[t], self.weightO)
          end
 
-         if self.maskzero then
-            -- build mask from input
-            local vectorDim = cur_x:dim()
-            self._zeroMask = self._zeroMask or cur_x.new()
-            self._zeroMask:norm(cur_x, 2, vectorDim)
-            self.zeroMask = self.zeroMask or ((torch.type(cur_x) == 'torch.CudaTensor') and torch.CudaByteTensor() or torch.ByteTensor())
-            self._zeroMask.eq(self.zeroMask, self._zeroMask, 0)
-            -- zero masked output
-            self:recursiveMask({next_h, next_c, cur_gates}, self.zeroMask)
-         end
+         self:zeroMaskState({next_h, next_c, cur_gates}, t, cur_x)
 
          prev_h, prev_c = next_h, next_c
       end
@@ -253,17 +239,7 @@ function SeqLSTM:backward(input, gradOutput, scale)
          end
          grad_next_h:add(gradOutput[t])
 
-         if self.maskzero then --and not self.weightO then
-            -- we only do this for sub-classes (LSTM doesn't need it)
-            -- build mask from input
-            local vectorDim = cur_x:dim()
-            self._zeroMask = self._zeroMask or cur_x.new()
-            self._zeroMask:norm(cur_x, 2, vectorDim)
-            self.zeroMask = self.zeroMask or ((torch.type(cur_x) == 'torch.CudaTensor') and torch.CudaByteTensor() or torch.ByteTensor())
-            self._zeroMask.eq(self.zeroMask, self._zeroMask, 0)
-            -- zero masked gradOutput
-            self:recursiveMask({grad_next_h, grad_next_c}, self.zeroMask)
-         end
+         self:zeroMaskState({grad_next_h, grad_next_c}, t, cur_x)
 
          if self.weightO then
             self.grad_hidden = self.grad_hidden or cur_x.new()
@@ -302,17 +278,7 @@ function SeqLSTM:backward(input, gradOutput, scale)
 
          local cur_x = input[t]
 
-         if self.maskzero and torch.type(self) ~= 'nn.SeqLSTM' then
-            -- we only do this for sub-classes (LSTM doesn't need it)
-            -- build mask from input
-            local vectorDim = cur_x:dim()
-            self._zeroMask = self._zeroMask or cur_x.new()
-            self._zeroMask:norm(cur_x, 2, vectorDim)
-            self.zeroMask = self.zeroMask or ((torch.type(cur_x) == 'torch.CudaTensor') and torch.CudaByteTensor() or torch.ByteTensor())
-            self._zeroMask.eq(self.zeroMask, self._zeroMask, 0)
-            -- zero masked gradOutput
-            self:recursiveMask(grad_next_h, self.zeroMask)
-         end
+         self:zeroMaskState({grad_next_h, grad_next_c}, t, cur_x)
 
          if self.weightO then -- LSTMP
             self.buffer3:resizeAs(grad_next_h):copy(grad_next_h)
@@ -442,10 +408,8 @@ function SeqLSTM:evaluate()
    assert(self.train == false)
 end
 
-function SeqLSTM:maskZero()
-   self.maskzero = true
-   return self
-end
+SeqLSTM.maskZero = nn.StepLSTM.maskZero
+SeqLSTM.setZeroMask = nn.MaskZero.setZeroMask
 
 function SeqLSTM:parameters()
    return {self.weight, self.bias, self.weightO}, {self.gradWeight, self.gradBias, self.gradWeightO}

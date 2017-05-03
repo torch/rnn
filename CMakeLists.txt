@@ -45,7 +45,6 @@ SET(luasrc
   SeqReverseSequence.lua
   Sequencer.lua
   SequencerCriterion.lua
-  TrimZero.lua
   ZeroGrad.lua
   test/bigtest.lua
   test/test.lua

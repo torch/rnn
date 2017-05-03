@@ -1,39 +1,10 @@
 local VariableLength, parent = torch.class("nn.VariableLength", "nn.Decorator")
 
--- make sure your module has been set-up for zero-masking (that is, module:maskZero())
 function VariableLength:__init(module, lastOnly)
-   parent.__init(self, module)
+   parent.__init(self, assert(module:maskZero()))
    -- only extract the last element of each sequence
    self.lastOnly = lastOnly -- defaults to false
    self.gradInput = {}
-end
-
--- recursively masks input (inplace)
-function VariableLength.recursiveMask(input, mask)
-   if torch.type(input) == 'table' then
-      for k,v in ipairs(input) do
-         self.recursiveMask(v, mask)
-      end
-   else
-      assert(torch.isTensor(input))
-
-      -- make sure mask has the same dimension as the input tensor
-      assert(mask:dim() == 2, "Expecting batchsize x seqlen mask tensor")
-      -- expand mask to input (if necessary)
-      local zeroMask
-      if input:dim() == 2 then
-         zeroMask = mask
-      elseif input:dim() > 2 then
-         local inputSize = input:size():fill(1)
-         inputSize[1] = input:size(1)
-         inputSize[2] = input:size(2)
-         zeroMask = mask:view(inputSize):expandAs(input)
-      else
-         error"Expecting batchsize x seqlen [ x ...] input tensor"
-      end
-      -- zero-mask input in between sequences
-      input:maskedFill(zeroMask, 0)
-   end
 end
 
 function VariableLength:updateOutput(input)
@@ -51,7 +22,8 @@ function VariableLength:updateOutput(input)
    self.indexes, self.mappedLengths = self._input.nn.VariableLength_FromSamples(input, self._input, self._mask)
 
    -- zero-mask the _input where mask is 1
-   self.recursiveMask(self._input, self._mask)
+   nn.utils.recursiveZeroMask(self._input, self._mask)
+   self.modules[1]:setZeroMask(self._mask)
 
    -- feedforward the zero-mask format through the decorated module
    local output = self.modules[1]:updateOutput(self._input)
@@ -82,7 +54,7 @@ function VariableLength:updateGradInput(input, gradOutput)
    end
 
    -- zero-mask the _gradOutput where mask is 1
-   self.recursiveMask(self._gradOutput, self._mask)
+   nn.utils.recursiveZeroMask(self._gradOutput, self._mask)
 
    -- updateGradInput decorated module
    local gradInput = self.modules[1]:updateGradInput(self._input, self._gradOutput)
@@ -107,4 +79,8 @@ function VariableLength:clearState()
    self._gradOutput = nil
    self._input = nil
    return parent.clearState(self)
+end
+
+function VariableLength:setZeroMask()
+   error"Not Supported"
 end

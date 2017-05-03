@@ -32,24 +32,18 @@ function AbstractRecurrent:getStepModule(step)
    return stepmodule
 end
 
-function AbstractRecurrent:maskZero(nInputDim)
-   local stepmodule = nn.MaskZero(self.modules[1], nInputDim, true)
-   self.sharedClones = {stepmodule}
-   self.modules[1] = stepmodule
-   return self
-end
-
-function AbstractRecurrent:trimZero(nInputDim)
-   if torch.typename(self)=='nn.GRU' and self.p ~= 0 then
-      assert(self.mono, "TrimZero for BGRU needs `mono` option.")
-   end
-   local stepmodule = nn.TrimZero(self.modules[1], nInputDim, true)
-   self.sharedClones = {stepmodule}
-   self.modules[1] = stepmodule
-   return self
-end
-
 function AbstractRecurrent:updateOutput(input)
+   if self.zeroMask then
+      -- where zeroMask = 1, the past is forgotten,
+      -- that is, the output/gradOutput is zero'd
+      local stepmodule = self:getStepModule(self.step)
+      self.zeroMaskStep = self.zeroMaskStep + 1
+      if self.zeroMaskStep > self.zeroMask:size(1) then
+         error"AbstractRecurrent.updateOutput called more times than self.zeroMask:size(1)"
+      end
+      stepmodule:setZeroMask(self.zeroMask[self.zeroMaskStep])
+   end
+
    -- feed-forward for one time-step
    self.output = self:_updateOutput(input)
 
@@ -64,6 +58,10 @@ function AbstractRecurrent:updateOutput(input)
 end
 
 function AbstractRecurrent:updateGradInput(input, gradOutput)
+   if self.zeroMask and self.zeroMask:size(1) ~= self.zeroMaskStep then
+      error"AbstractRecurrent.updateOutput called less times than self.zeroMask:size(1)"
+   end
+
    -- updateGradInput should be called in reverse order of time
    self.updateGradInputStep = self.updateGradInputStep or self.step
 
@@ -86,7 +84,7 @@ function AbstractRecurrent:accGradParameters(input, gradOutput, scale)
    self.accGradParametersStep = self.accGradParametersStep - 1
 end
 
--- goes hand in hand with the next method : forget()
+-- goes hand in hand with forget()
 -- this methods brings the oldest memory to the current step
 function AbstractRecurrent:recycle()
    self.nSharedClone = self.nSharedClone or _.size(self.sharedClones)
@@ -113,6 +111,7 @@ function nn.AbstractRecurrent:clearState()
       clone:clearState()
    end
    self.modules[1]:clearState()
+   self.zeroMask = nil
    return parent.clearState(self)
 end
 
@@ -189,6 +188,32 @@ function AbstractRecurrent:type(type, tensorcache)
    end)
 end
 
+function AbstractRecurrent:maskZero(v1)
+   if not self.maskzero then
+      self.maskzero = true
+      local stepmodule = nn.MaskZero(self.modules[1], v1)
+      self.sharedClones = {stepmodule}
+      self.modules[1] = stepmodule
+   end
+   return self
+end
+
+function AbstractRecurrent:setZeroMask(zeroMask)
+   if zeroMask == false then
+      self.zeroMask = false
+      for k,stepmodule in pairs(self.sharedClones) do
+         stepmodule:setZeroMask(zeroMask)
+      end
+   elseif torch.isTypeOf(self.modules[1], 'nn.AbstractRecurrent') then
+      self.modules[1]:setZeroMask(zeroMask)
+   else
+      assert(zeroMask:dim() >= 2, "Expecting dim >= 2 for zeroMask. For example, seqlen x batchsize")
+      -- reserve for later. Each step will be masked in updateOutput
+      self.zeroMask = zeroMask
+      self.zeroMaskStep = 0
+   end
+end
+
 function AbstractRecurrent:training()
    return self:includingSharedClones(function()
       return parent.training(self)
@@ -261,18 +286,12 @@ function AbstractRecurrent:setGradHiddenState(step, hiddenState)
    error"Not Implemented"
 end
 
--- backwards compatibility
-AbstractRecurrent.recursiveResizeAs = rnn.recursiveResizeAs
-AbstractRecurrent.recursiveSet = rnn.recursiveSet
-AbstractRecurrent.recursiveCopy = rnn.recursiveCopy
-AbstractRecurrent.recursiveAdd = rnn.recursiveAdd
-AbstractRecurrent.recursiveTensorEq = rnn.recursiveTensorEq
-AbstractRecurrent.recursiveNormal = rnn.recursiveNormal
-
 function AbstractRecurrent:__tostring__()
-   if self.inputSize and self.outputSize then
-       return self.__typename .. string.format("(%d -> %d)", self.inputSize, self.outputSize)
+   local inputsize = self.inputsize or self.inputSize
+   local outputsize = self.outputsize or self.outputSize
+   if inputsize and outputsize then
+       return self.__typename .. string.format("(%d -> %d)", inputsize, outputsize)
    else
-       return parent.__tostring__(self)
+       return self.__typename
    end
 end

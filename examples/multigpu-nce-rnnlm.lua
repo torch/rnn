@@ -112,10 +112,9 @@ if not lm then
    for i,hiddensize in ipairs(opt.hiddensize) do
       -- this is a faster version of nn.Sequencer(nn.RecLSTM(inpusize, hiddensize))
       local rnn =  opt.projsize < 1 and nn.SeqLSTM(inputsize, hiddensize)
-         or nn.SeqLSTMP(inputsize, opt.projsize, hiddensize) -- LSTM with a projection layer
-      rnn.maskzero = true
+         or nn.SeqLSTM(inputsize, opt.projsize, hiddensize) -- LSTM with a projection layer
       local device = i <= #opt.hiddensize/2 and 1 or 2
-      lm:add(nn.GPU(rnn, device):cuda())
+      lm:add(nn.GPU(rnn:maskZero(true), device):cuda())
       if opt.dropout > 0 then
          lm:add(nn.GPU(nn.Dropout(opt.dropout), device):cuda())
       end
@@ -146,7 +145,7 @@ if not lm then
       :add(nn.ZipTable()) -- {{x1,x2,...}, {t1,t2,...}} -> {{x1,t1},{x2,t2},...}
 
    -- encapsulate stepmodule into a Sequencer
-   local masked = nn.MaskZero(ncemodule, 1):cuda()
+   local masked = nn.MaskZero(ncemodule, true):cuda()
    lm:add(nn.GPU(nn.Sequencer(masked), 3, opt.device):cuda())
 
    -- remember previous state between batches
@@ -165,7 +164,7 @@ end
 if not (criterion and targetmodule) then
    --[[ loss function ]]--
 
-   local crit = nn.MaskZeroCriterion(nn.NCECriterion(), 0)
+   local crit = nn.MaskZeroCriterion(nn.NCECriterion(), true)
 
    -- target is also seqlen x batchsize.
    targetmodule = nn.Sequential()

@@ -34,6 +34,7 @@ function StepLSTM:__init(inputsize, hiddensize, outputsize)
    -- set this to true for variable length sequences that seperate
    -- independent sequences with a step of zeros (a tensor of size D)
    self.maskzero = false
+   self.v2 = true
 end
 
 function StepLSTM:reset(std)
@@ -45,26 +46,6 @@ function StepLSTM:reset(std)
    end
    return self
 end
-
--- unlike MaskZero, the mask is applied in-place
-function StepLSTM:recursiveMask(output, mask)
-   if torch.type(output) == 'table' then
-      for k,v in ipairs(output) do
-         self:recursiveMask(output[k], mask)
-      end
-   else
-      assert(torch.isTensor(output))
-
-      -- make sure mask has the same dimension as the output tensor
-      local outputSize = output:size():fill(1)
-      outputSize[1] = output:size(1)
-      mask:resize(outputSize)
-      -- build mask
-      local zeroMask = mask:expandAs(output)
-      output:maskedFill(zeroMask, 0)
-   end
-end
-
 
 function StepLSTM:updateOutput(input)
    self.recompute_backward = true
@@ -123,14 +104,14 @@ function StepLSTM:updateOutput(input)
       end
    end
 
-   if self.maskzero then
-      -- build mask from input
-      local zero_mask = torch.getBuffer('StepLSTM', 'zero_mask', cur_x)
-      zero_mask:norm(cur_x, 2, 2)
-      self.zeroMask = self.zeroMask or ((torch.type(cur_x) == 'torch.CudaTensor') and torch.CudaByteTensor() or torch.ByteTensor())
-      zero_mask.eq(self.zeroMask, zero_mask, 0)
-      -- zero masked output
-      self:recursiveMask({next_h, next_c, self.gates}, self.zeroMask)
+   if self.maskzero and self.zeroMask ~= false then
+      if self.v2 then
+         assert(self.zeroMask ~= nil, torch.type(self).." expecting zeroMask tensor or false")
+      else -- backwards compat
+         self.zeroMask = nn.utils.getZeroMaskBatch(cur_x, self.zeroMask)
+      end
+      -- zero masked outputs and gates
+      nn.utils.recursiveZeroMask({next_h, next_c, self.gates}, self.zeroMask)
    end
 
    return self.output
@@ -148,9 +129,9 @@ function StepLSTM:backward(input, gradOutput, scale)
    local grad_gates = torch.getBuffer('StepLSTM', 'grad_gates', self.gates) -- batchsize x 4*outputsize
    local grad_gates_sum = torch.getBuffer('StepLSTM', 'grad_gates_sum', self.gates) -- 1 x 4*outputsize
 
-   if self.maskzero then
+   if self.maskzero and self.zeroMask ~= false then
       -- zero masked gradOutput
-      self:recursiveMask({grad_next_h, grad_next_c}, self.zeroMask)
+      nn.utils.recursiveZeroMask({grad_next_h, grad_next_c}, self.zeroMask)
    end
 
    if cur_x.nn.StepLSTM_backward and not self.forceLua then
@@ -255,11 +236,6 @@ function StepLSTM:clearState()
 
    self.output[1]:set(); self.output[2]:set()
    self.gradInput[1]:set(); self.gradInput[2]:set(); self.gradInput[3]:set()
-
-   self.zeroMask = nil
-   self._zeroMask = nil
-   self._maskbyte = nil
-   self._maskindices = nil
 end
 
 function StepLSTM:type(type, ...)
@@ -271,9 +247,20 @@ function StepLSTM:parameters()
    return {self.weight, self.bias, self.weightO}, {self.gradWeight, self.gradBias, self.gradWeightO}
 end
 
-function StepLSTM:maskZero()
+function StepLSTM:maskZero(v1)
    self.maskzero = true
+   self.v2 = not v1
    return self
+end
+
+StepLSTM.setZeroMask = nn.MaskZero.setZeroMask
+
+function StepLSTM:__tostring__()
+   if self.weightO then
+       return self.__typename .. string.format("(%d -> %d -> %d)", self.inputsize, self.hiddensize, self.outputsize)
+   else
+       return self.__typename .. string.format("(%d -> %d)", self.inputsize, self.outputsize)
+   end
 end
 
 -- for sharedClone

@@ -53,6 +53,8 @@ require('rnn.BatchNormalization')
 
 
 -- modules
+require('rnn.LookupTableMaskZero')
+require('rnn.MaskZero')
 require('rnn.PrintSize')
 require('rnn.Convert')
 require('rnn.Constant')
@@ -81,8 +83,6 @@ require('rnn.SAdd')
 require('rnn.CopyGrad')
 require('rnn.VariableLength')
 require('rnn.StepLSTM')
-require('rnn.LookupTableMaskZero')
-require('rnn.MaskZero')
 require('rnn.SpatialBinaryConvolution')
 require('rnn.SimpleColorTransform')
 require('rnn.PCAColorTransform')

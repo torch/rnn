@@ -8,7 +8,6 @@ local AbstractSequencerCriterion, parent = torch.class('nn.AbstractSequencerCrit
 
 function AbstractSequencerCriterion:__init(criterion, sizeAverage)
    parent.__init(self)
-   self.criterion = criterion
    if torch.isTypeOf(criterion, 'nn.ModuleCriterion') then
       error(torch.type(self).." shouldn't decorate a ModuleCriterion. "..
          "Instead, try the other way around : "..
@@ -20,14 +19,14 @@ function AbstractSequencerCriterion:__init(criterion, sizeAverage)
    else
       self.sizeAverage = false
    end
-   self.clones = {}
+   self.clones = {criterion}
 end
 
 function AbstractSequencerCriterion:getStepCriterion(step)
    assert(step, "expecting step at arg 1")
    local criterion = self.clones[step]
    if not criterion then
-      criterion = self.criterion:clone()
+      criterion = self.clones[1]:clone()
       self.clones[step] = criterion
    end
    return criterion

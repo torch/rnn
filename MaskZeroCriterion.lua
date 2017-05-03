@@ -5,11 +5,11 @@
 ------------------------------------------------------------------------
 local MaskZeroCriterion, parent = torch.class("nn.MaskZeroCriterion", "nn.Criterion")
 
-function MaskZeroCriterion:__init(criterion)
+function MaskZeroCriterion:__init(criterion, v1)
    parent.__init(self)
    self.criterion = criterion
    assert(torch.isTypeOf(criterion, 'nn.Criterion'))
-   self.v2 = true
+   self.v2 = not v1
 end
 
 function MaskZeroCriterion:updateOutput(input, target)
@@ -39,7 +39,6 @@ function MaskZeroCriterion:updateOutput(input, target)
       -- indexSelect the input
       self.input = nn.utils.recursiveIndex(self.input, input, 1, self._indices)
       self.target = nn.utils.recursiveIndex(self.target, target, 1, self._indices)
-
       -- forward through decorated criterion
       self.output = self.criterion:updateOutput(self.input, self.target)
    end

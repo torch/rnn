@@ -17,7 +17,7 @@ local sharedLookupTable = nn.LookupTableMaskZero(nIndex, hiddenSize)
 -- forward rnn
 local fwd = nn.Sequential()
    :add(sharedLookupTable)
-   :add(nn.RecLSTM(hiddenSize, hiddenSize):maskZero(1))
+   :add(nn.RecLSTM(hiddenSize, hiddenSize):maskZero(true))
 
 -- internally, rnn will be wrapped into a Recursor to make it an AbstractRecurrent instance.
 fwdSeq = nn.Sequencer(fwd)
@@ -25,7 +25,7 @@ fwdSeq = nn.Sequencer(fwd)
 -- backward rnn (will be applied in reverse order of input sequence)
 local bwd = nn.Sequential()
    :add(sharedLookupTable:sharedClone())
-   :add(nn.RecLSTM(hiddenSize, hiddenSize):maskZero(1))
+   :add(nn.RecLSTM(hiddenSize, hiddenSize):maskZero(true))
 bwdSeq = nn.Sequencer(bwd)
 
 -- merges the output of one time-step of fwd and bwd rnns.
@@ -44,14 +44,14 @@ local brnn = nn.Sequential()
 
 local rnn = nn.Sequential()
    :add(brnn)
-   :add(nn.Sequencer(nn.MaskZero(nn.Linear(hiddenSize*2, nIndex), 1))) -- times two due to JoinTable
-   :add(nn.Sequencer(nn.MaskZero(nn.LogSoftMax(), 1)))
+   :add(nn.Sequencer(nn.MaskZero(nn.Linear(hiddenSize*2, nIndex), true))) -- times two due to JoinTable
+   :add(nn.Sequencer(nn.MaskZero(nn.LogSoftMax(), true)))
 
 print(rnn)
 
 -- build criterion
 
-criterion = nn.SequencerCriterion(nn.MaskZeroCriterion(nn.ClassNLLCriterion(), 1))
+criterion = nn.SequencerCriterion(nn.MaskZeroCriterion(nn.ClassNLLCriterion(), true))
 
 -- build dummy dataset (task is to predict next item, given previous)
 sequence_ = torch.LongTensor():range(1,10) -- 1,2,3,4,5,6,7,8,9,10
