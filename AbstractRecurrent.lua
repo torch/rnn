@@ -282,7 +282,7 @@ function AbstractRecurrent:getGradHiddenState(step, input)
 end
 
 -- set stored grad hidden state
-function AbstractRecurrent:setGradHiddenState(step, hiddenState)
+function AbstractRecurrent:setGradHiddenState(step, gradHiddenState)
    error"Not Implemented"
 end
 

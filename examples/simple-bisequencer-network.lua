@@ -10,11 +10,7 @@ lr = 0.1
 
 -- forward rnn
 -- build simple recurrent neural network
-local fwd = nn.Recurrent(
-   hiddenSize, nn.LookupTable(nIndex, hiddenSize),
-   nn.Linear(hiddenSize, hiddenSize), nn.Sigmoid(),
-   seqlen
-)
+local fwd = nn.LookupRNN(nIndex, hiddenSize)
 
 -- backward rnn (will be applied in reverse order of input sequence)
 local bwd = fwd:clone()
