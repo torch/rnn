@@ -65,9 +65,21 @@ local decInSeq = torch.Tensor({{6,1,2,3,4,0,0,0},{6,5,4,3,2,1,0,0}}):t()
 -- Label '7' represents the end of sentence (EOS).
 local decOutSeq = torch.Tensor({{1,2,3,4,7,0,0,0},{5,4,3,2,1,7,0,0}}):t()
 
+-- the zeroMasks are used for zeroing intermediate RNN states where the zeroMask = 1
+-- randomly set the zeroMasks from the input sequence or explicitly
+local encZeroMask = math.random() < 0.5 and nn.utils.getZeroMaskSequence(encInSeq) -- auto zeroMask from input sequence
+                                         or torch.ByteTensor({{1,1,1,1,0,0,0},{1,1,1,0,0,0,0}}):t():contiguous() -- explicit zeroMask
+local decZeroMask = math.random() < 0.5 and nn.utils.getZeroMaskSequence(decInSeq)
+                                         or torch.ByteTensor({{0,0,0,0,0,1,1,1},{0,0,0,0,0,0,1,1}}):t():contiguous()
+
 for i=1,opt.niter do
    enc:zeroGradParameters()
    dec:zeroGradParameters()
+
+   -- zero-masking
+   enc:setZeroMask(encZeroMask)
+   dec:setZeroMask(decZeroMask)
+   criterion:setZeroMask(decZeroMask)
 
    -- Forward pass
    local encOut = enc:forward(encInSeq)

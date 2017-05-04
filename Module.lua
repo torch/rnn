@@ -1,3 +1,4 @@
+local _ = require 'moses'
 local Module = nn.Module
 
 -- You can use this to manually forget past memories in AbstractRecurrent instances
@@ -20,12 +21,25 @@ function Module:remember(remember)
    return self
 end
 
-function Module:stepClone(shareParams, shareGradParams)
-   return self:sharedClone(shareParams, shareGradParams, true)
+function Module:maskZero(v1)
+   if self.modules then
+      for i, module in ipairs(self.modules) do
+         module:maskZero(v1)
+      end
+   end
+   return self
 end
 
-function Module:backwardOnline()
-   print("Deprecated Jan 6, 2016. By default rnn now uses backwardOnline, so no need to call this method")
+function Module:setZeroMask(zeroMask)
+   if self.modules then
+      for i, module in ipairs(self.modules) do
+         module:setZeroMask(zeroMask)
+      end
+   end
+end
+
+function Module:stepClone(shareParams, shareGradParams)
+   return self:sharedClone(shareParams, shareGradParams, true)
 end
 
 -- calls setOutputStep on all component AbstractRecurrent modules
@@ -78,7 +92,7 @@ function Module:sharedClone(shareParams, shareGradParams, stepClone)
    shareGradParams = (shareGradParams == nil) and true or shareGradParams
 
    if stepClone and self.dpnn_stepclone then
-      -- this is for AbstractRecurrent modules (in rnn)
+      -- this is for AbstractRecurrent modules
       return self
    end
 

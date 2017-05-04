@@ -13,5 +13,5 @@ function LinearRNN:__init(inputsize, outputsize, transfer)
 end
 
 function LinearRNN:__tostring__()
-   return torch.type(self) .. "(" .. self.inputsize .. ", " .. self.outputsize ..")"
+   return torch.type(self) .. "(" .. self.inputsize .. " -> " .. self.outputsize ..")"
 end

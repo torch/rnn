@@ -154,8 +154,8 @@ function GRU:_updateGradInput(input, gradOutput)
    -- backward propagate through this step
    local _gradOutput = self:getGradHiddenState(step, input)
    assert(_gradOutput)
-   self._gradOutputs[step] = nn.rnn.recursiveCopy(self._gradOutputs[step], _gradOutput)
-   nn.rnn.recursiveAdd(self._gradOutputs[step], gradOutput)
+   self._gradOutputs[step] = nn.utils.recursiveCopy(self._gradOutputs[step], _gradOutput)
+   nn.utils.recursiveAdd(self._gradOutputs[step], gradOutput)
    gradOutput = self._gradOutputs[step]
 
    local gradInputTable = stepmodule:updateGradInput({input, self:getHiddenState(step-1)}, gradOutput)

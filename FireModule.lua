@@ -16,7 +16,7 @@ function FireModule:__init(nInputPlane, s1x1, e1x1, e3x3, activation)
       print('Warning: <FireModule> s1x1 is recommended to be smaller'..
             ' then e1x1+e3x3')
    end
-   
+
    self.module = nn.Sequential()
    self.squeeze = nn.SpatialConvolution(nInputPlane, s1x1, 1, 1)
    self.expand = nn.Concat(2)
@@ -28,7 +28,7 @@ function FireModule:__init(nInputPlane, s1x1, e1x1, e3x3, activation)
    self.module:add(nn[self.activation]())
    self.module:add(self.expand)
    self.module:add(nn[self.activation]())
-   
+
    Parent.__init(self, self.module)
 end
 

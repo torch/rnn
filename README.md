@@ -27,15 +27,19 @@ Modules that `forward` entire sequences through a decorated `AbstractRecurrent` 
  * [RecurrentAttention](#rnn.RecurrentAttention) : a generalized attention model for [REINFORCE modules](https://github.com/nicholas-leonard/dpnn#nn.Reinforce);
 
 Miscellaneous modules and criterions :
- * [MaskZero](#rnn.MaskZero) : zeroes the `output` and `gradOutput` rows of the decorated module for commensurate `input` rows which are tensors of zeros;
- * [TrimZero](#rnn.TrimZero) : same behavior as `MaskZero`, but more efficient when `input` contains lots zero-masked rows;
+ * [MaskZero](#rnn.MaskZero) : zeroes the `output` and `gradOutput` rows of the decorated module for commensurate
+   * `input` rows which are tensors of zeros (version 1);
+   * `zeroMask` elements which are 1 (version 2);
  * [LookupTableMaskZero](#rnn.LookupTableMaskZero) : extends `nn.LookupTable` to support zero indexes for padding. Zero indexes are forwarded as tensors of zeros;
- * [MaskZeroCriterion](#rnn.MaskZeroCriterion) : zeros the `gradInput` and `err` rows of the decorated criterion for commensurate `input` rows which are tensors of zeros;
+ * [MaskZeroCriterion](#rnn.MaskZeroCriterion) : zeros the `gradInput` and `loss` rows of the decorated criterion for commensurate
+   * `input` rows which are tensors of zeros (version 1);
+   * `zeroMask` elements which are 1 (version 2);
  * [SeqReverseSequence](#rnn.SeqReverseSequence) : reverses an input sequence on a specific dimension;
  * [VariableLength](#rnn.VariableLength): decorates a `Sequencer` to accept and produce a table of variable length inputs and outputs;
 
 Criterions used for handling sequential inputs and targets :
- * [SequencerCriterion](#rnn.SequencerCriterion) : sequentially applies the same criterion to a sequence of inputs and targets (Tensor or Table).
+ * [AbstractSequencerCriterion](#rnn.AbstractSequencerCriterion) : abstact class for criterions that handle sequences (tensor or table);
+ * [SequencerCriterion](#rnn.SequencerCriterion) : sequentially applies the same criterion to a sequence of inputs and targets;
  * [RepeaterCriterion](#rnn.RepeaterCriterion) : repeatedly applies the same criterion with the same target on a sequence.
 
 
@@ -96,30 +100,7 @@ Additional differentiable criterions
 <a name='rnn.examples'></a>
 ## Examples ##
 
-The following are example training scripts using this package :
-
-  * [RNN/LSTM/GRU](examples/recurrent-language-model.lua) for Penn Tree Bank dataset;
-  * [Noise Contrastive Estimate](examples/noise-contrastive-estimate.lua) for training multi-layer [SeqLSTM](#rnn.SeqLSTM) language models on the [Google Billion Words dataset](https://github.com/Element-Research/dataload#dl.loadGBW). The example uses [MaskZero](#rnn.MaskZero) to train independent variable length sequences using the [NCEModule](https://github.com/Element-Research/dpnn#nn.NCEModule) and [NCECriterion](https://github.com/Element-Research/dpnn#nn.NCECriterion). This script is our fastest yet boasting speeds of 20,000 words/second (on NVIDIA Titan X) with a 2-layer LSTM having 250 hidden units, a batchsize of 128 and sequence length of a 100. Note that you will need to have [Torch installed with Lua instead of LuaJIT](http://torch.ch/docs/getting-started.html#_);
-  * [Recurrent Model for Visual Attention](examples/recurrent-visual-attention.lua) for the MNIST dataset;
-  * [Encoder-Decoder LSTM](examples/encoder-decoder-coupling.lua) shows you how to couple encoder and decoder `LSTMs` for sequence-to-sequence networks;
-  * [Simple Recurrent Network](examples/simple-recurrent-network.lua) shows a simple example for building and training a simple recurrent neural network;
-  * [Simple Sequencer Network](examples/simple-sequencer-network.lua) is a version of the above script that uses the Sequencer to decorate the `rnn` instead;
-  * [Sequence to One](examples/sequence-to-one.lua) demonstrates how to do many to one sequence learning as is the case for sentiment analysis;
-  * [Multivariate Time Series](examples/recurrent-time-series.lua) demonstrates how train a simple RNN to do multi-variate time-series predication.
-
-### External Resources
-
-  * [rnn-benchmarks](https://github.com/glample/rnn-benchmarks) : benchmarks comparing Torch (using this library), Theano and TensorFlow.
-  * [Harvard Jupyter Notebook Tutorial](http://nbviewer.jupyter.org/github/CS287/Lectures/blob/gh-pages/notebooks/ElementRNNTutorial.ipynb) : an in-depth tutorial for how to use the Element-Research rnn package by Harvard University;
-  * [dpnn](https://github.com/Element-Research/dpnn) : this is a dependency of the __rnn__ package. It contains useful nn extensions, modules and criterions;
-  * [dataload](https://github.com/Element-Research/dataload) : a collection of torch dataset loaders;
-  * [RNN/LSTM/BRNN/BLSTM training script ](https://github.com/nicholas-leonard/dp/blob/master/examples/recurrentlanguagemodel.lua) for Penn Tree Bank or Google Billion Words datasets;
-  * A brief (1 hours) overview of Torch7, which includes some details about the __rnn__ packages (at the end), is available via this [NVIDIA GTC Webinar video](http://on-demand.gputechconf.com/gtc/2015/webinar/torch7-applied-deep-learning-for-vision-natural-language.mp4). In any case, this presentation gives a nice overview of Logistic Regression, Multi-Layer Perceptrons, Convolutional Neural Networks and Recurrent Neural Networks using Torch7;
-  * [Sequence to Sequence mapping using encoder-decoder RNNs](https://github.com/rahul-iisc/seq2seq-mapping) : a complete training example using synthetic data.
-  * [ConvLSTM](https://github.com/viorik/ConvLSTM) is a repository for training a [Spatio-temporal video autoencoder with differentiable memory](http://arxiv.org/abs/1511.06309).
-  * An [time series example](https://github.com/rracinskij/rnntest01/blob/master/rnntest01.lua) for univariate timeseries prediction.
-  * [Sagar Waghmare](https://github.com/sagarwaghmare69) wrote a nice [tutorial](tutorials/ladder.md) on how to use rnn with nngraph to reproduce the [Lateral Connections in Denoising Autoencoders Support Supervised Learning](http://arxiv.org/pdf/1504.08215.pdf).
-
+A complete list of examples is available in the [examples directory](examples/README.md)
 
 ## Citation ##
 
@@ -128,7 +109,7 @@ If you use __rnn__ in your work, we'd really appreciate it if you could cite the
 Léonard, Nicholas, Sagar Waghmare, Yang Wang, and Jin-Hwa Kim. [rnn: Recurrent Library for Torch.](http://arxiv.org/abs/1511.07889) arXiv preprint arXiv:1511.07889 (2015).
 
 Any significant contributor to the library will also get added as an author to the paper.
-A [significant contributor](https://github.com/Element-Research/rnn/graphs/contributors)
+A [significant contributor](https://github.com/torch/rnn/graphs/contributors)
 is anyone who added at least 300 lines of code to the library.
 
 ## Troubleshooting ##
@@ -137,8 +118,8 @@ Most issues can be resolved by updating the various dependencies:
 ```bash
 luarocks install torch
 luarocks install nn
-luarocks install dpnn
 luarocks install torchx
+luarocks install dataload
 ```
 
 If you are using CUDA :
@@ -157,24 +138,40 @@ If that doesn't fix it, open and issue on github.
 
 <a name='rnn.AbstractRecurrent'></a>
 ## AbstractRecurrent ##
-An abstract class inherited by [Recurrent](#rnn.Recurrent), [RecLSTM](#rnn.RecLSTM) and [GRU](#rnn.GRU).
+An abstract class inherited by [Recurrence](#rnn.Recurrence), [RecLSTM](#rnn.RecLSTM) and [GRU](#rnn.GRU).
 The constructor takes a single argument :
 ```lua
-rnn = nn.AbstractRecurrent([rho])
+rnn = nn.AbstractRecurrent(stepmodule)
 ```
-Argument `rho` is the maximum number of steps to backpropagate through time (BPTT).
-Sub-classes can set this to a large number like 99999 (the default) if they want to backpropagate through
-the entire sequence whatever its length. Setting lower values of rho are
-useful when long sequences are forward propagated, but we only whish to
-backpropagate through the last `rho` steps, which means that the remainder
-of the sequence doesn't need to be stored (so no additional cost).
+The `stepmodule` argument is an `nn.Module` instance that [cloned with shared parameters](#nn.Module.sharedClone) at each time-step.
+Sub-classes can call the [getStepModule(step)](#rnn.AbstractRecurrent.getStepModule) to automatically clone the `stepmodule`
+and share it's parameters for each time-`step`.
+Each call to `forward/updateOutput` calls `self:getStepModule(self.step)` and increments the `self.step` attribute.
+That is, each `forward` call to an `AbstractRecurrent` instance memorizes a new `step` by memorizing the previous `stepmodule` clones.
+Although they share parameters and their gradients, each `stepmodule` clone has its own `output` and `gradInput` states.
 
-### [recurrentModule] getStepModule(step) ###
+A good example of a `stepmodule` is the [StepLSTM](#rnn.StepLSTM) used internally by the `RecLSTM`, an `AbstractRecurrent` instance.
+The `StepLSTM` implements a single time-step for an LSTM.
+The `RecLSTM` calls `getStepModule(step)` to clone the `StepLSTM` for each time-step.
+The `RecLSTM` handles the feeding back of previous `StepLSTM.output` states and current `input` state into the `StepLSTM`.
+
+Many libraries implement RNNs as modules that forward entire sequences.
+This library also supports this use case by wrapping `AbstractRecurrent` modules into [Sequencer](#rnn.Sequencer) modules
+or more directly via the stand-alone [SeqLSTM](#rnn.SeqLSTM) and [SeqGRU](#rnn.SeqGRU) modules.
+The `rnn` library also provides the `AbstractRecurrent` interface to support real-time RNNs.
+These are RNNs for which the entire `input` sequence is not know in advance.
+Typically, this is because `input[t+1]` is dependent on `output[t] = RNN(input[t])`.
+The `AbstractRecurrent` interface makes it easy to build these real-time RNNs.
+A good example is the [RecurrentAttention](#rnn.RecurrentAttention) module which implements an attention model using real-time RNNs.
+
+<a name='rnn.AbstractRecurrent.getStepModule'></a>
+### [stepmodule] getStepModule(step) ###
 Returns a module for time-step `step`. This is used internally by sub-classes
-to obtain copies of the internal `recurrentModule`. These copies share
+to obtain copies of the internal `stepmodule`. These copies share
 `parameters` and `gradParameters` but each have their own `output`, `gradInput`
 and any other intermediate states.
 
+<a name='rnn.AbstractRecurrent.setOutputStep'></a>
 ### setOutputStep(step) ###
 This is a method reserved for internal use by [Recursor](#rnn.Recursor)
 when doing backward propagation. It sets the object's `output` attribute
@@ -182,25 +179,86 @@ to point to the output at time-step `step`.
 This method was introduced to solve a very annoying bug.
 
 <a name='rnn.AbstractRecurrent.maskZero'></a>
-### maskZero(nInputDim) ###
-Decorates the internal `recurrentModule` with [MaskZero](#rnn.MaskZero).
-The `output` Tensor (or table thereof) of the `recurrentModule`
-will have each row (i.e. samples) zeroed when the commensurate row of the `input`
-is a tensor of zeros.
+### [self] maskZero(v1) ###
 
-The `nInputDim` argument must specify the number of non-batch dims
-in the first Tensor of the `input`. In the case of an `input` table,
-the first Tensor is the first one encountered when doing a depth-first search.
+Decorates the internal `stepmodule` with [MaskZero](#rnn.MaskZero).
+The `stepmodule` is the module that is [cloned with shared parameters](#nn.Module.sharedClone) at each time-step.
+The `output` and `gradOutput` Tensor (or table thereof) of the `stepmodule`
+will have each row (that is, samples) zeroed where
+ * the commensurate row of the `input` is a tensor of zeros (version 1 with `v1=true`); or
+ * the commensurate element of the `zeroMask` tensor is 1 (version 2; the default).
 
-Calling this method makes it possible to pad sequences with different lengths in the same batch with zero vectors.
+Version 2 (the default), requires that [`setZeroMask(zeroMask)`](#rnn.AbstractRecurrent.setZeroMask)
+be called beforehand. The `zeroMask` must be a `seqlen x batchsize` ByteTensor or CudaByteTensor.
 
-When a sample time-step is masked (i.e. `input` is a row of zeros), then
-the hidden state is effectively reset (i.e. forgotten) for the next non-mask time-step.
+![zeroMask](doc/image/zeroMask.png)
+In the above figure, we can see an `input` and commensurate `zeroMask` of size `seqlen=4 x batchsize=3`.
+The `input` could have additional dimensions like `seqlen x batchsize x inputsize`.
+The dark blocks in the `input` separate difference sequences in each sample/row.
+The same elements in the `zeroMask` are set to 1, while the remainder are set to 0.
+For version 1, the dark blocks in the `input` would have a norm of 0, by which a `zeroMask` is automatically interpolated.
+For version 2, the `zeroMask` is provided before calling `forward(input)`,
+thereby alleviated the need to call `norm` at each zero-masked module.
+
+The zero-masking implemented by `maskZero()` and `setZeroMask()` makes it possible to pad sequences with different lengths in the same batch with zero vectors.
+
+At a given time-step `t`, a sample `i` is masked when:
+ * the `input[i]` is a row of zeros (version 1) where `input` is a batched time-step; or
+ * the `zeroMask[{t,i}] = 1` (version 2).
+
+When a sample time-step is masked, the hidden state is effectively reset (that is, forgotten) for the next non-mask time-step.
 In other words, it is possible seperate unrelated sequences with a masked element.
 
-### trimZero(nInputDim) ###
-Decorates the internal `recurrentModule` with [TrimZero](#rnn.TrimZero).
+The `maskZero()` method returns `self`.
+The `maskZero()` method can me called on any `nn.Module`.
+Zero-masking only supports batch mode.
 
+See the [noise-contrastive-estimate.lua](examples/noise-contrastive-estimate.lua) script for an example implementation of version 2 zero-masking.
+See the [simple-bisequencer-network-variable.lua](examples/simple-bisequencer-network-variable.lua) script for an example implementation of version 1 zero-masking.
+
+<a name='rnn.AbstractRecurrent.setZeroMask'></a>
+### setZeroMask(zeroMask) ##
+
+Sets the `zeroMask` of the RNN.
+
+For example,
+```lua
+seqlen, batchsize = 2, 4
+inputsize, outputsize = 3, 1
+-- an AbstractRecurrent instance encapsulated by a Sequencer
+lstm = nn.Sequencer(nn.RecLSTM(inputsize, outputsize))
+lstm:maskZero() -- enable version 2 zero-masking
+-- zero-mask the sequence
+zeroMask = torch.ByteTensor(seqlen, batchsize):zero()
+zeroMask[{1,3}] = 1
+zeroMask[{2,4}] = 1
+lstm:setZeroMask(zeroMask)
+-- forward sequence
+input = torch.randn(seqlen, batchsize, inputsize)
+output = lstm:forward(input)
+print(output)
+(1,.,.) =
+ -0.1715
+  0.0212
+  0.0000
+  0.3301
+
+(2,.,.) =
+  0.1695
+ -0.2507
+ -0.1700
+  0.0000
+[torch.DoubleTensor of size 2x4x1]
+```
+the `output` is indeed zeroed for the 3rd sample in the first time-step (`zeroMask[{1,3}] = 1`)
+and for the fourth sample in the second time-step (`zeroMask[{2,4}] = 1`).
+The `gradOutput` would also be zeroed in the same way.
+
+The `setZeroMask()` method can me called on any `nn.Module`.
+
+When `zeroMask=false`, the zero-masking is disabled.
+
+<a name='rnn.AbstractRecurrent.updateOutput'></a>
 ### [output] updateOutput(input) ###
 Forward propagates the input for the current step. The outputs or intermediate
 states of the previous steps are used recurrently. This is transparent to the
@@ -208,7 +266,7 @@ caller as the previous outputs and intermediate states are memorized. This
 method also increments the `step` attribute by 1.
 
 <a name='rnn.AbstractRecurrent.updateGradInput'></a>
-### updateGradInput(input, gradOutput) ###
+### [gradInput] updateGradInput(input, gradOutput) ###
 Like `backward`, this method should be called in the reverse order of
 `forward` calls used to propagate a sequence. So for example :
 
@@ -234,13 +292,13 @@ Like `updateGradInput`, but for accumulating gradients w.r.t. parameters.
 ### recycle(offset) ###
 This method goes hand in hand with `forget`. It is useful when the current
 time-step is greater than `rho`, at which point it starts recycling
-the oldest `recurrentModule` `sharedClones`,
+the oldest `stepmodule` `sharedClones`,
 such that they can be reused for storing the next step. This `offset`
 is used for modules like `nn.Recurrent` that use a different module
 for the first step. Default offset is 0.
 
 <a name='rnn.AbstractRecurrent.forget'></a>
-### forget(offset) ###
+### forget() ###
 This method brings back all states to the start of the sequence buffers,
 i.e. it forgets the current sequence. It also resets the `step` attribute to 1.
 It is highly recommended to call `forget` after each parameter update.
@@ -250,23 +308,15 @@ the result of now changed parameters. It is also good practice to call
 `forget` at the start of each new sequence.
 
 <a name='rnn.AbstractRecurrent.maxBPTTstep'></a>
-###  maxBPTTstep(rho) ###
+### maxBPTTstep(seqlen) ###
 This method sets the maximum number of time-steps for which to perform
-backpropagation through time (BPTT). So say you set this to `rho = 3` time-steps,
+backpropagation through time (BPTT). So say you set this to `seqlen = 3` time-steps,
 feed-forward for 4 steps, and then backpropgate, only the last 3 steps will be
 used for the backpropagation. If your AbstractRecurrent instance is wrapped
-by a [Sequencer](#rnn.Sequencer), this will be handled auto-magically by the Sequencer.
-Otherwise, setting this value to a large value (i.e. 9999999), is good for most, if not all, cases.
-
-<a name='rnn.AbstractRecurrent.backwardOnline'></a>
-### backwardOnline() ###
-This method was deprecated Jan 6, 2016.
-Since then, by default, `AbstractRecurrent` instances use the
-backwardOnline behaviour.
-See [updateGradInput](#rnn.AbstractRecurrent.updateGradInput) for details.
+by a [Sequencer](#rnn.Sequencer), this will be handled auto-magically by the `Sequencer`.
 
 ### training() ###
-In training mode, the network remembers all previous `rho` (number of time-steps)
+In training mode, the network remembers all previous `seqlen` (number of time-steps)
 states. This is necessary for BPTT.
 
 ### evaluate() ###
@@ -274,6 +324,31 @@ During evaluation, since their is no need to perform BPTT at a later time,
 only the previous step is remembered. This is very efficient memory-wise,
 such that evaluation can be performed using potentially infinite-length
 sequence.
+
+<a name='rnn.AbstractRecurrent.getHiddenState'></a>
+### [hiddenState] getHiddenState(step, [input]) ###
+Returns the stored hidden state.
+For example, the hidden state `h[step]` would be returned where `h[step] = f(x[step], h[step-1])`.
+The `input` is only required for `step=0` as it is used to initialize `h[0] = 0`.
+See [encoder-decoder-coupling.lua](examples/encoder-decoder-coupling.lua) for an example.
+
+<a name='rnn.AbstractRecurrent.setHiddenState'></a>
+### setHiddenState(step, hiddenState)
+Set the hidden state of the RNN.
+This is useful to implement encoder-decoder coupling to form sequence to sequence networks.
+See [encoder-decoder-coupling.lua](examples/encoder-decoder-coupling.lua) for an example.
+
+<a name='rnn.AbstractRecurrent.getGradHiddenState'></a>
+### getGradHiddenState(step, [input])
+Return stored gradient of the hidden state: `grad(h[t])`
+The `input` is used to initialize the last step of the RNN with zeros.
+See [encoder-decoder-coupling.lua](examples/encoder-decoder-coupling.lua) for an example.
+
+<a name='rnn.AbstractRecurrent.setGradHiddenState'></a>
+### setGradHiddenState(step, gradHiddenState)
+Set the stored grad hidden state for a specific time-`step`.
+This is useful to implement encoder-decoder coupling to form sequence to sequence networks.
+See [encoder-decoder-coupling.lua](examples/encoder-decoder-coupling.lua) for an example.
 
 <a name='rnn.Recurrent.Sequencer'></a>
 <a name='rnn.AbstractRecurrent.Sequencer'></a>
@@ -479,7 +554,6 @@ The `nn.GRU(inputSize, outputSize [,rho [,p [, mono]]])` constructor takes 3 arg
  * `outputSize` : a number specifying the size of the output;
  * `rho` : the maximum amount of backpropagation steps to take back in time. Limits the number of previous steps kept in memory. Defaults to 9999;
  * `p` : dropout probability for inner connections of GRUs.
- * `mono` : Monotonic sample for dropouts inside GRUs. Only needed in a `TrimZero` + `BGRU`(p>0) situation.
 
 ![GRU](http://d3kbpzbmcynnmx.cloudfront.net/wp-content/uploads/2015/10/Screen-Shot-2015-10-23-at-10.36.51-AM.png)
 
@@ -490,7 +564,7 @@ r[t] = σ(W[x->r]x[t] + W[s->r]s[t−1] + b[1->r])            (2)
 h[t] = tanh(W[x->h]x[t] + W[hr->c](s[t−1]r[t]) + b[1->h])  (3)
 s[t] = (1-z[t])h[t] + z[t]s[t-1]                           (4)
 ```
-where `W[s->q]` is the weight matrix from `s` to `q`, `t` indexes the time-step, `b[1->q]` are the biases leading into `q`, `σ()` is `Sigmoid`, `x[t]` is the input and `s[t]` is the output of the module (eq. 4). Note that unlike the [LSTM](#rnn.LSTM), the GRU has no cells.
+where `W[s->q]` is the weight matrix from `s` to `q`, `t` indexes the time-step, `b[1->q]` are the biases leading into `q`, `σ()` is `Sigmoid`, `x[t]` is the input and `s[t]` is the output of the module (eq. 4). Note that unlike the [RecLSTM](#rnn.RecLSTM), the GRU has no cells.
 
 The GRU was benchmark on `PennTreeBank` dataset using [recurrent-language-model.lua](examples/recurrent-language-model.lua) script.
 It slightly outperfomed [FastLSTM](https://github.com/torch/rnn/blob/master/deprecated/README.md#rnn.FastLSTM) (deprecated), however, since LSTMs have more parameters than GRUs,
@@ -667,10 +741,10 @@ training script for an example of its use.
 A extremely general container for implementing pretty much any type of recurrence.
 
 ```lua
-rnn = nn.Recurrence(recurrentModule, outputSize, nInputDim, [rho])
+rnn = nn.Recurrence(stepmodule, outputSize, nInputDim, [rho])
 ```
 
-`Recurrence` manages a single `recurrentModule`, which should
+`Recurrence` manages a single `stepmodule`, which should
 output a Tensor or table : `output(t)`
 given an input table : `{input(t), output(t-1)}`.
 Using a mix of `Recursor` (say, via `Sequencer`) with `Recurrence`, one can implement
@@ -761,6 +835,32 @@ local rnn = nn.Sequential()
 This abstract class implements a light interface shared by
 subclasses like : `Sequencer`, `Repeater`, `RecurrentAttention`, `BiSequencer` and so on.
 
+<a name='rnn.AbstractSequencer.remember'></a>
+### remember([mode]) ###
+When `mode='neither'` (the default behavior of the class), the Sequencer will additionally call [forget](#nn.AbstractRecurrent.forget) before each call to `forward`.
+When `mode='both'` (the default when calling this function), the Sequencer will never call [forget](#nn.AbstractRecurrent.forget).
+In which case, it is up to the user to call `forget` between independent sequences.
+This behavior is only applicable to decorated AbstractRecurrent `modules`.
+Accepted values for argument `mode` are as follows :
+
+ * 'eval' only affects evaluation (recommended for RNNs)
+ * 'train' only affects training
+ * 'neither' affects neither training nor evaluation (default behavior of the class)
+ * 'both' affects both training and evaluation (recommended for LSTMs)
+
+<a name='rnn.AbstractSequencer.hasMemory'></a>
+### [bool] hasMemory()
+
+Returns true if the instance has memory.
+See [remember()](#rnn.AbstractSequencer.remember) for details.
+
+<a name='rnn.AbstractSequencer.setZeroMask'></a>
+### setZeroMask(zeroMask)
+
+Expects a `seqlen x batchsize` `zeroMask`.
+The `zeroMask` is then passed to `seqlen` criterions by indexing `zeroMask[step]`.
+When `zeroMask=false`, the zero-masking is disabled.
+
 <a name='rnn.Sequencer'></a>
 ## Sequencer ##
 
@@ -771,11 +871,13 @@ to be applied from left to right, on each element of the input sequence.
 seq = nn.Sequencer(module)
 ```
 
-This Module is a kind of [decorator](http://en.wikipedia.org/wiki/Decorator_pattern)
+The `Sequencer` is a kind of [decorator](http://en.wikipedia.org/wiki/Decorator_pattern)
 used to abstract away the intricacies of `AbstractRecurrent` modules. While an `AbstractRecurrent` instance
 requires that a sequence to be presented one input at a time, each with its own call to `forward` (and `backward`),
 the `Sequencer` forwards an `input` sequence (a table) into an `output` sequence (a table of the same length).
-It also takes care of calling `forget` on AbstractRecurrent instances.
+It also takes care of calling `forget` on `AbstractRecurrent` instances.
+
+The `Sequencer` inherits [AbstractSequencer](#rnn.AbstractSequencer)
 
 ### Input/Output Format
 
@@ -867,7 +969,7 @@ Accepted values for argument `mode` are as follows :
  * 'both' affects both training and evaluation (recommended for LSTMs)
 
 ### forget() ###
-Calls the decorated AbstractRecurrent module's `forget` method.
+Calls the decorated `AbstractRecurrent` module's `forget` method.
 
 <a name='rnn.SeqLSTM'></a>
 ## SeqLSTM ##
@@ -1130,53 +1232,85 @@ A complete implementation of Ref. A is available [here](examples/recurrent-visua
 
 <a name='rnn.MaskZero'></a>
 ## MaskZero ##
-This module zeroes the `output` rows of the decorated module
-for commensurate `input` rows which are tensors of zeros.
+
+This module implements *zero-masking*.
+Zero-masking implements the zeroing specific rows/samples of a module's `output` and `gradInput` states.
+Zero-masking is used for efficiently processing variable length sequences.
 
 ```lua
-mz = nn.MaskZero(module, nInputDim)
+mz = nn.MaskZero(module, [v1, maskinput, maskoutput])
 ```
 
-The `output` Tensor (or table thereof) of the decorated `module`
-will have each row (samples) zeroed when the commensurate row of the `input`
-is a tensor of zeros.
+This module zeroes the `output` and `gradOutput` rows of the decorated `module` where
+ * the commensurate row of the `input` is a tensor of zeros (version 1 with `v1=true`); or
+ * the commensurate element of the `zeroMask` tensor is 1 (version 2 with `v1=false`, the default).
 
-The `nInputDim` argument must specify the number of non-batch dims
-in the first Tensor of the `input`. In the case of an `input` table,
-the first Tensor is the first one encountered when doing a depth-first search.
+Version 2 (the default), requires that [`setZeroMask(zeroMask)`](#rnn.MaskZero.setZeroMask)
+be called beforehand. The `zeroMask` must be a `torch.ByteTensor` or `torch.CudaByteTensor` of size `batchsize`.
 
-This decorator makes it possible to pad sequences with different lengths in the same batch with zero vectors.
+At a given time-step `t`, a sample `i` is masked when:
+ * the `input[i]` is a row of zeros (version 1) where `input` is a batched time-step; or
+ * the `zeroMask[{t,i}] = 1` (version 2).
 
-Caveat: `MaskZero` not guarantee that the `output` and `gradInput` tensors of the internal modules
-of the decorated `module` will be zeroed as well when the `input` is zero as well.
-`MaskZero` only affects the immediate `gradInput` and `output` of the module that it encapsulates.
+When a sample time-step is masked, the hidden state is effectively reset (that is, forgotten) for the next non-mask time-step.
+In other words, it is possible seperate unrelated sequences with a masked element.
+
+When `maskoutput=true` (the default), `output` and `gradOutput` are zero-masked.
+When `maskinput=true` (not the default), `input` and `gradInput` aere zero-masked.
+
+Zero-masking only supports batch mode.
+
+Caveat: `MaskZero` does not guarantee that the `output` and `gradOutput` tensors of the internal modules
+of the decorated `module` will be zeroed.
+`MaskZero` only affects the immediate `gradOutput` and `output` of the module that it encapsulates.
 However, for most modules, the gradient update for that time-step will be zero because
 backpropagating a gradient of zeros will typically yield zeros all the way to the input.
-In this respect, modules to avoid in encapsulating inside a `MaskZero` are `AbsractRecurrent`
+In this respect, modules that shouldn't be encapsulated inside a `MaskZero` are `AbsractRecurrent`
 instances as the flow of gradients between different time-steps internally.
 Instead, call the [AbstractRecurrent.maskZero](#rnn.AbstractRecurrent.maskZero) method
-to encapsulate the internal `recurrentModule`.
+to encapsulate the internal `stepmodule`.
 
-<a name='rnn.TrimZero'></a>
-## TrimZero ##
+See the [noise-contrastive-estimate.lua](examples/noise-contrastive-estimate.lua) script for an example implementation of version 2 zero-masking.
+See the [simple-bisequencer-network-variable.lua](examples/simple-bisequencer-network-variable.lua) script for an example implementation of version 1 zero-masking.
 
-WARNING : only use this module if your input contains lots of zeros.
-In almost all cases, [`MaskZero`](#rnn.MaskZero) will be faster, especially with CUDA.
+<a name='rnn.MaskZero.setZeroMask'></a>
+### setZeroMask(zeroMask) ##
 
-Ref. A : [TrimZero: A Torch Recurrent Module for Efficient Natural Language Processing](https://bi.snu.ac.kr/Publications/Conferences/Domestic/KIIS2016S_JHKim.pdf)
-
-The usage is the same with `MaskZero`.
-
+Set the `zeroMask` of the `MaskZero` module (required for version 2 forwards).
+For example,
 ```lua
-mz = nn.TrimZero(module, nInputDim)
+batchsize = 3
+inputsize, outputsize = 2, 1
+-- an nn.Linear module decorated with MaskZero (version 2)
+module = nn.MaskZero(nn.Linear(inputsize, outputsize))
+-- zero-mask the second sample/row
+zeroMask = torch.ByteTensor(batchsize):zero()
+zeroMask[2] = 1
+module:setZeroMask(zeroMask)
+-- forward
+input = torch.randn(batchsize, inputsize)
+output = module:forward(input)
+print(output)
+ 0.6597
+ 0.0000
+ 0.8170
+[torch.DoubleTensor of size 3x1]
+```
+The `output` is indeed zeroed for the second sample (`zeroMask[2] = 1`).
+The `gradInput` would also be zeroed in the same way because the `gradOutput` would be zeroed:
+```lua
+gradOutput = torch.randn(batchsize, outputsize)
+gradInput = module:backward(input, gradOutput)
+print(gradInput)
+ 0.8187  0.0534
+ 0.0000  0.0000
+ 0.1742  0.0114
+[torch.DoubleTensor of size 3x2]
 ```
 
-The only difference from `MaskZero` is that it reduces computational costs by varying a batch size, if any, for the case that varying lengths are provided in the input.
-Notice that when the lengths are consistent, `MaskZero` will be faster, because `TrimZero` has an operational cost.
+For `Container` modules, a call to `setZeroMask()` is propagated to all component modules that expect a `zeroMask`.
 
-In short, the result is the same with `MaskZero`'s, however, `TrimZero` is faster than `MaskZero` only when sentence lengths is costly vary.
-
-In practice, e.g. language model, `TrimZero` is expected to be faster than `MaskZero` about 30%. (You can test with it using `test/test_trimzero.lua`.)
+When `zeroMask=false`, the zero-masking is disabled.
 
 <a name='rnn.LookupTableMaskZero'></a>
 ## LookupTableMaskZero ##
@@ -1190,22 +1324,29 @@ The `output` Tensor will have each row zeroed when the commensurate row of the `
 
 This lookup table makes it possible to pad sequences with different lengths in the same batch with zero vectors.
 
+Note that this module ignores version 2 zero-masking, and therefore expects inputs to be zeros where needed.
+
 <a name='rnn.MaskZeroCriterion'></a>
 ## MaskZeroCriterion ##
-This criterion zeroes the `err` and `gradInput` rows of the decorated criterion
-for commensurate `input` rows which are tensors of zeros.
+
+This criterion ignores samples (rows in the `input` and `target` tensors)
+where the `zeroMask` ByteTensor passed to `MaskZeroCriterion:setZeroMask(zeroMask)` is 1.
+This criterion only supports batch-mode.
 
 ```lua
-mzc = nn.MaskZeroCriterion(criterion, nInputDim)
+batchsize = 3
+zeroMask = torch.ByteTensor(batchsize):zero()
+zeroMask[2] = 1 -- the 2nd sample in batch is ignored
+mzc = nn.MaskZeroCriterion(criterion)
+mzc:setZeroMask(zeroMask)
+loss = mzc:forward(input, target)
+gradInput = mzc:backward(input, target)
+assert(gradInput[2]:sum() == 0)
 ```
 
-The `gradInput` Tensor (or table thereof) of the decorated `criterion`
-will have each row (samples) zeroed when the commensurate row of the `input`
-is a tensor of zeros. The `err` will also disregard such zero rows.
-
-The `nInputDim` argument must specify the number of non-batch dims
-in the first Tensor of the `input`. In the case of an `input` table,
-the first Tensor is the first one encountered when doing a depth-first search.
+In the above example, the second row of the `gradInput` Tensor is zero.
+This is because the commensurate row in the `zeroMask` is a one.
+The call to `forward` also disregards the second sample in measuring the `loss`.
 
 This decorator makes it possible to pad sequences with different lengths in the same batch with zero vectors.
 
@@ -1281,6 +1422,28 @@ print(output)
 
 The module doesn't support CUDA.
 
+<a name='rnn.AbstractSequencerCriterion'></a>
+## AbstractSequencerCriterion ##
+
+```lua
+asc = nn.AbstractSequencerCriterion(stepcriterion, [sizeAverage])
+```
+
+Similar to the `stepmodule` passed to the [AbstractRecurrent](#rnn.AbstractRecurrent) constructor,
+the `stepcriterion` is internally cloned for each time-step.
+Unlike the `stepmodule` the `stepcriterion` never has any parameters to share.
+
+<a name='rnn.AbstractSequencerCriterion.getStepCriterion'></a>
+### [criterion] getStepCriterion(step)
+
+Returns a `criterion` clone of the `stepcriterion` (stored in `self.clones[1]`) for a specific time-`step`.
+
+<a name='rnn.AbstractSequencerCriterion.setZeroMask'></a>
+### setZeroMask(zeroMask)
+
+Expects a `seqlen x batchsize` `zeroMask`.
+The `zeroMask` is then passed to `seqlen` criterions by indexing `zeroMask[step]`.
+When `zeroMask=false`, the zero-masking is disabled.
 
 <a name='rnn.SequencerCriterion'></a>
 ## SequencerCriterion ##
@@ -1318,7 +1481,7 @@ which are repeatedly presented with the same target.
 ## Module ##
 
 The Module interface has been further extended with methods that facilitate
-stochastic gradient descent like [updateGradParameters](#nn.Module.updageGradParameters) (i.e. momentum learning),
+stochastic gradient descent like [updateGradParameters](#nn.Module.updageGradParameters) (for momentum learning),
 [weightDecay](#nn.Module.weightDecay), [maxParamNorm](#nn.Module.maxParamNorm) (for regularization), and so on.
 
 <a name='nn.Module.dpnn_parameters'></a>

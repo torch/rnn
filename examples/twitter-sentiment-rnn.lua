@@ -6,7 +6,6 @@
 require 'paths'
 require 'optim'
 require 'rnn'
-require 'nngraph'
 require 'cutorch'
 require 'cunn'
 local dl = require 'dataload'
@@ -78,7 +77,7 @@ trainSet, validSet, testSet = dl.loadSentiment140(datapath, minFreq,
 -- Model
 if not opt.loadModel then
    print("Building model")
-   modelPath = paths.concat(savepath, 
+   modelPath = paths.concat(savepath,
                             "Sentiment140_model_" .. dl.uniqueid() .. ".net")
    lookupDim = tonumber(opt.lookupDim)
    lookupDropout = tonumber(opt.lookupDropout)
@@ -98,13 +97,11 @@ if not opt.loadModel then
    -- Recurrent layers
    local inputSize = lookupDim
    for i, hiddenSize in ipairs(hiddenSizes) do
-      local rnn = nn.SeqLSTM(inputSize, hiddenSize)
-      rnn.maskzero = true
-      model:add(rnn)
+      model:add(nn.SeqLSTM(inputSize, hiddenSize):maskZero(true))
       if dropouts[i] ~= 0 and dropouts[i] ~= nil then
          model:add(nn.Dropout(dropouts[i]))
       end
-      inputSize = hiddenSize 
+      inputSize = hiddenSize
    end
    model:add(nn.Select(1, -1))
 
@@ -119,7 +116,7 @@ end
 print("Model path: " .. modelPath)
 collectgarbage()
 
--- Criterion 
+-- Criterion
 criterion = nn.ClassNLLCriterion()
 
 -- Training
@@ -275,7 +272,7 @@ for epoch=1, epochs do
    else
       earlyStopCount = earlyStopCount + 1
    end
-   
+
    if earlyStopCount >= earlyStopThresh then
       print("Early stopping at epoch: " .. tostring(epoch))
       break

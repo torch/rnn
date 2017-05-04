@@ -5,7 +5,7 @@ function LookupRNN:__init(nindex, outputsize, transfer, merge)
    merge = merge or nn.CAddTable()
    local stepmodule = nn.Sequential() -- input is {x[t], h[t-1]}
       :add(nn.ParallelTable()
-	     :add(nn.LookupTable(nindex, outputsize)) -- input layer
+	      :add(nn.LookupTableMaskZero(nindex, outputsize)) -- input layer
          :add(nn.Linear(outputsize, outputsize))) -- recurrent layer
 	  :add(merge)
 	  :add(transfer)
@@ -14,10 +14,6 @@ function LookupRNN:__init(nindex, outputsize, transfer, merge)
    self.outputsize = outputsize
 end
 
-function LookupRNN:maskZero()
-   error"Not Implemented"
-end
-
 function LookupRNN:__tostring__()
-   return torch.type(self) .. "(" .. self.nindex .. ", " .. self.outputsize ..")"
+   return torch.type(self) .. "(" .. self.nindex .. " -> " .. self.outputsize ..")"
 end

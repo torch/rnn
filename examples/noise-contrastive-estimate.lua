@@ -105,11 +105,10 @@ if not lm then
    -- rnn layers
    local inputsize = opt.inputsize
    for i,hiddensize in ipairs(opt.hiddensize) do
-      -- this is a faster version of nn.Sequencer(nn.RecSTM(inpusize, hiddensize))
-      local rnn =  opt.projsize < 1 and nn.SeqLSTM(inputsize, hiddensize)
-         or nn.SeqLSTMP(inputsize, opt.projsize, hiddensize) -- LSTM with a projection layer
-      rnn.maskzero = true
-      lm:add(rnn)
+      -- this is a faster version of nn.Sequencer(nn.RecLSTM(inpusize, hiddensize))
+      local rnn = opt.projsize < 1 and nn.SeqLSTM(inputsize, hiddensize)
+         or nn.SeqLSTM(inputsize, opt.projsize, hiddensize) -- LSTM with a projection layer
+      lm:add(rnn:maskZero())
       if opt.dropout > 0 then
          lm:add(nn.Dropout(opt.dropout))
       end
@@ -130,7 +129,7 @@ if not lm then
       :add(nn.ZipTable()) -- {{x1,x2,...}, {t1,t2,...}} -> {{x1,t1},{x2,t2},...}
 
    -- encapsulate stepmodule into a Sequencer
-   lm:add(nn.Sequencer(nn.MaskZero(ncemodule, 1)))
+   lm:add(nn.Sequencer(nn.MaskZero(ncemodule)))
 
    -- remember previous state between batches
    lm:remember()
@@ -155,7 +154,7 @@ end
 if not (criterion and targetmodule) then
    --[[ loss function ]]--
 
-   local crit = nn.MaskZeroCriterion(nn.NCECriterion(), 0)
+   local crit = nn.MaskZeroCriterion(nn.NCECriterion())
 
    -- target is also seqlen x batchsize.
    targetmodule = nn.SplitTable(1)
@@ -199,6 +198,7 @@ if not xplog then
 end
 local ntrial = 0
 
+local zeroMask
 local epoch = xplog.epoch+1
 opt.lr = opt.lr or opt.startlr
 opt.trainsize = opt.trainsize == -1 and trainset:size() or opt.trainsize
@@ -215,6 +215,9 @@ while opt.maxepoch <= 0 or epoch <= opt.maxepoch do
    for i, inputs, targets in trainset:subiter(opt.seqlen, opt.trainsize) do
       targets = targetmodule:forward(targets)
       inputs = {inputs, targets}
+      -- zero-mask
+      zeroMask = nn.utils.getZeroMaskSequence(inputs[1], zeroMask)
+      nn.utils.setZeroMask({lm, criterion}, zeroMask, opt.cuda)
       -- forward
       local outputs = lm:forward(inputs)
       local err = criterion:forward(outputs, targets)
@@ -273,6 +276,10 @@ while opt.maxepoch <= 0 or epoch <= opt.maxepoch do
    local sumErr = 0
    for i, inputs, targets in validset:subiter(opt.seqlen, opt.validsize) do
       targets = targetmodule:forward(targets)
+      -- zero-mask
+      zeroMask = nn.utils.getZeroMaskSequence(inputs, zeroMask)
+      nn.utils.setZeroMask({lm, criterion}, zeroMask, opt.cuda)
+      -- forward
       local outputs = lm:forward{inputs, targets}
       local err = criterion:forward(outputs, targets)
       sumErr = sumErr + err

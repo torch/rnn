@@ -86,7 +86,7 @@ function Sequencer:updateOutput(input)
          end
       else
          for step=1,nStep do
-            self.tableoutput[step] = nn.rnn.recursiveCopy(
+            self.tableoutput[step] = nn.utils.recursiveCopy(
                self.tableoutput[step] or table.remove(self._output, 1),
                self.module:updateOutput(input[step])
             )
