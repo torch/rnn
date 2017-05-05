@@ -3,8 +3,6 @@ require 'rnn'
 require 'optim'
 local dl = require 'dataload'
 
-version = 2
-
 --[[ command line arguments ]]--
 cmd = torch.CmdLine()
 cmd:text()
@@ -33,10 +31,10 @@ cmd:option('--progress', false, 'print progress bar')
 cmd:option('--silent', false, 'don\'t print anything to stdout')
 cmd:option('--uniform', 0.1, 'initialize parameters using uniform distribution between -uniform and uniform. -1 means default initialization')
 -- rnn layer
-cmd:option('--lstm', false, 'use Long Short Term Memory (nn.LSTM instead of nn.Recurrent)')
+cmd:option('--lstm', false, 'use Long Short Term Memory (nn.LSTM instead of nn.LinearRNN)')
 cmd:option('--bn', false, 'use batch normalization. Only supported with --lstm')
-cmd:option('--gru', false, 'use Gated Recurrent Units (nn.GRU instead of nn.Recurrent)')
-cmd:option('--mfru', false, 'use Multi-function Recurrent Unit (nn.MuFuRu instead of nn.Recurrent)')
+cmd:option('--gru', false, 'use Gated Recurrent Units (nn.RecGRU instead of nn.LinearRNN)')
+cmd:option('--mfru', false, 'use Multi-function Recurrent Unit (nn.MuFuRu instead of nn.LinearRNN)')
 cmd:option('--seqlen', 5, 'sequence length : back-propagate through time (BPTT) for this many time-steps')
 cmd:option('--inputsize', -1, 'size of lookup table embeddings. -1 defaults to hiddensize[1]')
 cmd:option('--hiddensize', '{200}', 'number of hidden units used at output of each recurrent layer. When more than one is specified, RNN/LSTMs/GRUs are stacked')
@@ -50,6 +48,7 @@ cmd:option('--id', '', 'id string of this experiment (used to name output file) 
 
 cmd:text()
 local opt = cmd:parse(arg or {})
+opt.version = 2
 opt.hiddensize = loadstring(" return "..opt.hiddensize)()
 opt.schedule = loadstring(" return "..opt.schedule)()
 opt.adamconfig = loadstring(" return "..opt.adamconfig)()
@@ -80,7 +79,7 @@ local lm = nn.Sequential()
 local lookup = nn.LookupTable(#trainset.ivocab, opt.inputsize)
 lookup.maxOutNorm = -1 -- prevent weird maxnormout behaviour
 lm:add(lookup) -- input is seqlen x batchsize
-if opt.dropout > 0 and not opt.gru then  -- gru has a dropout option
+if opt.dropout > 0 then
    lm:add(nn.Dropout(opt.dropout))
 end
 lm:add(nn.SplitTable(1)) -- tensor to table of tensors
@@ -92,7 +91,7 @@ for i,hiddensize in ipairs(opt.hiddensize) do
    local rnn
 
    if opt.gru then -- Gated Recurrent Units
-      rnn = nn.GRU(inputsize, hiddensize, nil, opt.dropout/2)
+      rnn = nn.RecGRU(inputsize, hiddensize)
    elseif opt.lstm then -- Long Short Term Memory units
       rnn = nn.RecLSTM(inputsize, hiddensize)
    elseif opt.mfru then -- Multi Function Recurrent Unit

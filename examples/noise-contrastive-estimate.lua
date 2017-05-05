@@ -36,7 +36,7 @@ cmd:option('--rownoise', false, 'sample k noise samples for each row for NCE mod
 -- rnn layer
 cmd:option('--seqlen', 50, 'sequence length : back-propagate through time (BPTT) for this many time-steps')
 cmd:option('--inputsize', -1, 'size of lookup table embeddings. -1 defaults to hiddensize[1]')
-cmd:option('--hiddensize', '{256,256}', 'number of hidden units used at output of each recurrent layer. When more than one is specified, RNN/LSTMs/GRUs are stacked')
+cmd:option('--hiddensize', '{256,256}', 'number of hidden units used at output of each recurrent layer. When more than one is specified, LSTMS are stacked')
 cmd:option('--projsize', -1, 'size of the projection layer (number of hidden cell units for LSTMP)')
 cmd:option('--dropout', 0, 'ancelossy dropout with this probability after each rnn layer. dropout <= 0 disables it.')
 -- data
