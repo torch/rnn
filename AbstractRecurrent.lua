@@ -34,9 +34,8 @@ end
 
 function AbstractRecurrent:updateOutput(input)
    if self.zeroMask then
-      -- where zeroMask = 1, the past is forgotten,
-      -- that is, the output/gradOutput is zero'd
-      local stepmodule = self:getStepModule(self.step)
+      -- where zeroMask = 1, the past is forgotten, that is, the output/gradOutput is zeroed
+      local stepmodule = (self.train==false) and self.modules[1] or self:getStepModule(self.step)
       self.zeroMaskStep = self.zeroMaskStep + 1
       if self.zeroMaskStep > self.zeroMask:size(1) then
          error"AbstractRecurrent.updateOutput called more times than self.zeroMask:size(1)"
@@ -106,7 +105,7 @@ end
 function nn.AbstractRecurrent:clearState()
    self:forget()
    -- keep the first two sharedClones
-   nn.utils.clear(self, '_input', '_gradOutput', '_gradOutputs', 'gradPrevOutput', 'cell', 'cells', 'gradCells', 'outputs', 'gradInputs', 'gradOutputs')
+   nn.utils.clear(self, 'prevOutput', '_input', '_gradOutput', '_gradOutputs', 'gradPrevOutput', 'cell', 'cells', 'gradCells', 'outputs', 'gradInputs', 'gradOutputs')
    for i, clone in ipairs(self.sharedClones) do
       clone:clearState()
    end

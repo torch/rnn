@@ -31,7 +31,9 @@ function RecGRU:_updateOutput(input)
       local stepmodule = self:getStepModule(self.step)
       output = stepmodule:updateOutput({input, prevOutput})
    else
-      output = self.modules[1]:updateOutput({input, prevOutput})
+      self._prevOutput = self._prevOutput or prevOutput.new()
+      self._prevOutput:resizeAs(prevOutput):copy(prevOutput)
+      output = self.modules[1]:updateOutput({input, self._prevOutput})
    end
 
    return output
@@ -76,7 +78,6 @@ end
 
 function RecGRU:clearState()
    self.startState = nil
-   self.zeroCell:set()
    self.zeroOutput:set()
    return parent.clearState(self)
 end

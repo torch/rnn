@@ -86,7 +86,9 @@ function Recurrence:_updateOutput(input)
       -- the actual forward propagation
       output = stepmodule:updateOutput{input, prevOutput}
    else
-      output = self.modules[1]:updateOutput{input, prevOutput}
+      -- make a copy of prevOutput to prevent 'output = m:forward(output)' errors
+      self._prevOutput = nn.utils.recursiveCopy(self._prevOutput, prevOutput)
+      output = self.modules[1]:updateOutput{input, self._prevOutput}
    end
 
    return output
@@ -195,4 +197,3 @@ function Recurrence:setGradHiddenState(step, gradHiddenState)
       nn.Container.setGradHiddenState(self, step, gradHiddenState[2])
    end
 end
-
