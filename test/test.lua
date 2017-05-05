@@ -4743,6 +4743,74 @@ function rnntest.StepLSTM_C_projection()
    end
 end
 
+function rnntest.StepGRU()
+   local seqlen, batchsize = 3, 4
+   local inputsize, outputsize = 2, 5
+   local stepmodule = nn.StepGRU(inputsize, outputsize)
+   local recmodule = nn.Recurrence(stepmodule, outputsize, 1, seqlen)
+   local gru = nn.Sequencer(recmodule)
+
+   local input = torch.randn(seqlen, batchsize, inputsize)
+   local output = gru:forward(input)
+
+   local seqgru = nn.SeqGRU(inputsize, outputsize)
+   seqgru.weight:copy(stepmodule.weight)
+   seqgru.bias:copy(stepmodule.bias)
+
+   local output2 = seqgru:forward(input)
+   mytester:assertTensorEq(output, output2, 0.000001)
+
+   gru:zeroGradParameters()
+   seqgru:zeroGradParameters()
+
+   local gradOutput = torch.randn(seqlen, batchsize, outputsize)
+   local gradInput = gru:backward(input, gradOutput)
+
+   local gradInput2 = seqgru:backward(input, gradOutput)
+   mytester:assertTensorEq(gradInput, gradInput2, 0.000001)
+
+   local params, gradParams = gru:parameters()
+   local params2, gradParams2 = seqgru:parameters()
+
+   for i=1,#params2 do
+      mytester:assertTensorEq(gradParams[i], gradParams2[i], 0.0000001)
+   end
+end
+
+function rnntest.StepGRU_C()
+   local batchsize, inputsize, outputsize = 2, 3, 4
+   local stepgru = nn.StepGRU(inputsize, outputsize)
+   local stepgru2 = stepgru:clone()
+   stepgru2.forceLua = true
+
+   local input = {torch.randn(batchsize, inputsize), torch.randn(batchsize, outputsize), torch.randn(batchsize, outputsize)}
+   local output = stepgru:forward(input)
+   local output2 = stepgru2:forward(input)
+
+   mytester:assertTensorEq(output, output2, 0.000001)
+   mytester:assertTensorEq(stepgru.gates, stepgru2.gates, 0.000001)
+
+   stepgru:zeroGradParameters()
+   stepgru2:zeroGradParameters()
+
+   local gradOutput = torch.randn(batchsize, outputsize)
+   local gradInput = stepgru:backward(input, gradOutput, 1)
+   local gradGates = torch.getBuffer('StepGRU', 'grad_gates', stepgru.gates):clone()
+   local gradInput2 = stepgru2:backward(input, gradOutput, 1)
+   local gradGates2 = torch.getBuffer('StepGRU', 'grad_gates', stepgru.gates)
+
+   mytester:assertTensorEq(gradInput[1], gradInput2[1], 0.000001)
+   mytester:assertTensorEq(gradInput[2], gradInput2[2], 0.000001)
+   mytester:assertTensorEq(gradGates, gradGates2, 0.000001)
+
+   local params, gradParams = stepgru:parameters()
+   local params2, gradParams2 = stepgru2:parameters()
+
+   for i=1,#params2 do
+      mytester:assertTensorEq(gradParams[i], gradParams2[i], 0.0000001)
+   end
+end
+
 function rnntest.RecLSTM()
    local seqlen, batchsize = 3, 4
    local inputsize, outputsize = 2, 5

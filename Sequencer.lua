@@ -8,7 +8,6 @@
 -- The sequences in a batch must have the same size.
 -- But the sequence length of each batch can vary.
 ------------------------------------------------------------------------
-assert(not nn.Sequencer, "update nnx package : luarocks install nnx")
 local Sequencer, parent = torch.class('nn.Sequencer', 'nn.AbstractSequencer')
 local _ = require 'moses'
 

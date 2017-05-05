@@ -65,13 +65,18 @@ static long get_n_samples(lua_State *L, int lengths_index) {
 #include "generic/StepLSTM.c"
 #include "THGenerateFloatTypes.h"
 
+#include "generic/StepGRU.c"
+#include "THGenerateFloatTypes.h"
+
 DLL_EXPORT int luaopen_librnn(lua_State *L)
 {
   nn_FloatVariableLength_init(L);
   nn_FloatStepLSTM_init(L);
+  nn_FloatStepGRU_init(L);
 
   nn_DoubleVariableLength_init(L);
   nn_DoubleStepLSTM_init(L);
+  nn_DoubleStepGRU_init(L);
 
   return 1;
 }

@@ -51,6 +51,7 @@ SET(luasrc
   VariableLength.lua
   StepLSTM.lua
   RecLSTM.lua
+  StepGRU.lua
   utils.lua
   LinearRNN.lua
   LookupRNN.lua
