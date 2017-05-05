@@ -52,6 +52,7 @@ SET(luasrc
   StepLSTM.lua
   RecLSTM.lua
   StepGRU.lua
+  RecGRU.lua
   utils.lua
   LinearRNN.lua
   LookupRNN.lua

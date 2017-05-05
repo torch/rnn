@@ -4922,6 +4922,83 @@ function rnntest.RecLSTM_maskzero()
    end
 end
 
+function rnntest.RecGRU()
+   local seqlen, batchsize = 3, 4
+   local inputsize, outputsize = 2, 5
+   local recgru = nn.RecGRU(inputsize, outputsize)
+   local gru = nn.Sequencer(recgru)
+
+   local input = torch.randn(seqlen, batchsize, inputsize)
+   local output = gru:forward(input)
+
+   local seqgru = nn.SeqGRU(inputsize, outputsize)
+   seqgru.weight:copy(recgru.modules[1].weight)
+   seqgru.bias:copy(recgru.modules[1].bias)
+
+   local output2 = seqgru:forward(input)
+   mytester:assertTensorEq(output, output2, 0.000001)
+
+   gru:zeroGradParameters()
+   seqgru:zeroGradParameters()
+
+   local gradOutput = torch.randn(seqlen, batchsize, outputsize)
+   local gradInput = gru:backward(input, gradOutput)
+
+   local gradInput2 = seqgru:backward(input, gradOutput)
+   mytester:assertTensorEq(gradInput, gradInput2, 0.000001)
+
+   local params, gradParams = gru:parameters()
+   local params2, gradParams2 = seqgru:parameters()
+
+   for i=1,#params2 do
+      mytester:assertTensorEq(gradParams[i], gradParams2[i], 0.0000001)
+   end
+end
+
+function rnntest.RecGRU_maskzero()
+   local T, N, D, H = 3, 2, 4, 5
+   local recgru = nn.RecGRU(D,H):maskZero()
+   local seqgru = nn.Sequencer(recgru)
+   local seqgru2 = nn.SeqGRU(D,H):maskZero()
+   seqgru2.weight:copy(recgru.modules[1].weight)
+   seqgru2.bias:copy(recgru.modules[1].bias)
+
+   local input = torch.randn(T, N, D)
+   input[{2,1}]:fill(0)
+   input[{3,2}]:fill(0)
+   local gradOutput = torch.randn(T, N, H)
+
+   local zeroMask = torch.ByteTensor(T, N):zero()
+   zeroMask[{2,1}] = 1
+   zeroMask[{3,2}] = 1
+   seqgru:setZeroMask(zeroMask)
+   seqgru2:setZeroMask(zeroMask)
+   local output = seqgru:forward(input)
+   local output2 = seqgru2:forward(input)
+
+   mytester:assert(output[{2,1}]:norm() == 0)
+   mytester:assert(output[{3,2}]:norm() == 0)
+
+   mytester:assertTensorEq(output, output2, 0.000001)
+
+   seqgru:zeroGradParameters()
+   local gradInput = seqgru:backward(input, gradOutput)
+   seqgru2:zeroGradParameters()
+   local gradInput2 = seqgru2:backward(input, gradOutput)
+
+   mytester:assert(gradInput[{2,1}]:norm() == 0)
+   mytester:assert(gradInput[{3,2}]:norm() == 0)
+
+   mytester:assertTensorEq(gradInput, gradInput2, 0.000001)
+
+   local params, gradParams = seqgru:parameters()
+   local params2, gradParams2 = seqgru2:parameters()
+
+   for i=1,#params do
+      mytester:assertTensorEq(gradParams[i], gradParams[i], 0.0000001)
+   end
+end
+
 function rnntest.LinearRNN()
    local inputsize, outputsize = 3, 4
    local seqlen, batchsize = 5, 2
