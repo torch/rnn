@@ -3,6 +3,7 @@ These modules are DEPRECATED:
   * [FastLSTM](#rnn.FastLSTM) : an LSTM with optional support for batch normalization;
   * [LSTM](#rnn.LSTM) : a vanilla Long-Short Term Memory module (uses peephole connections);
   * [SeqLSTMP](#rnn.LSTM) : a vanilla Long-Short Term Memory module (uses peephole connections);
+  * [GRU](#rnn.GRU) : a slower GRU than RecGRU;
 
 <a name='rnn.LSTM'></a>
 ## LSTM ##
@@ -109,7 +110,6 @@ lstm = nn.FastLSTM(inputsize, outputsize, [rho, eps, momentum, affine]
 
 where `momentum` is same as `gamma` in the equation above (defaults to 0.1), `eps` is defined above and `affine` is a boolean whose state determines if the learnable affine transform is turned off (`false`) or on (`true`, the default).
 
-
 <a name='rnn.SeqLSTMP'></a>
 ## SeqLSTMP ##
 References:
@@ -141,3 +141,55 @@ The algorithm is outlined in ref. A and benchmarked with state of the art result
 `SeqLSTMP` can be used with an `hiddensize >> outputsize` such that the effective size of the memory cells `c[t]`
 and gates `i[t]`, `f[t]` and `o[t]` can be much larger than the actual input `x[t]` and output `r[t]`.
 For fixed `inputsize` and `outputsize`, the `SeqLSTMP` will be able to remember much more information than the `SeqLSTM`.
+
+
+<a name='rnn.GRU'></a>
+## GRU ##
+
+References :
+ * A. [Learning Phrase Representations Using RNN Encoder-Decoder For Statistical Machine Translation.](http://arxiv.org/pdf/1406.1078.pdf)
+ * B. [Implementing a GRU/LSTM RNN with Python and Theano](http://www.wildml.com/2015/10/recurrent-neural-network-tutorial-part-4-implementing-a-grulstm-rnn-with-python-and-theano/)
+ * C. [An Empirical Exploration of Recurrent Network Architectures](http://jmlr.org/proceedings/papers/v37/jozefowicz15.pdf)
+ * D. [Empirical Evaluation of Gated Recurrent Neural Networks on Sequence Modeling](http://arxiv.org/abs/1412.3555)
+ * E. [RnnDrop: A Novel Dropout for RNNs in ASR](http://www.stat.berkeley.edu/~tsmoon/files/Conference/asru2015.pdf)
+ * F. [A Theoretically Grounded Application of Dropout in Recurrent Neural Networks](http://arxiv.org/abs/1512.05287)
+
+This is an implementation of Gated Recurrent Units module.
+
+The `nn.GRU(inputSize, outputSize [,rho [,p [, mono]]])` constructor takes 3 arguments likewise `nn.LSTM` or 4 arguments for dropout:
+ * `inputSize` : a number specifying the size of the input;
+ * `outputSize` : a number specifying the size of the output;
+ * `rho` : the maximum amount of backpropagation steps to take back in time. Limits the number of previous steps kept in memory. Defaults to 9999;
+ * `p` : dropout probability for inner connections of GRUs.
+
+![GRU](http://d3kbpzbmcynnmx.cloudfront.net/wp-content/uploads/2015/10/Screen-Shot-2015-10-23-at-10.36.51-AM.png)
+
+The actual implementation corresponds to the following algorithm:
+```lua
+z[t] = σ(W[x->z]x[t] + W[s->z]s[t−1] + b[1->z])            (1)
+r[t] = σ(W[x->r]x[t] + W[s->r]s[t−1] + b[1->r])            (2)
+h[t] = tanh(W[x->h]x[t] + W[hr->c](s[t−1]r[t]) + b[1->h])  (3)
+s[t] = (1-z[t])h[t] + z[t]s[t-1]                           (4)
+```
+where `W[s->q]` is the weight matrix from `s` to `q`, `t` indexes the time-step, `b[1->q]` are the biases leading into `q`, `σ()` is `Sigmoid`, `x[t]` is the input and `s[t]` is the output of the module (eq. 4). Note that unlike the [RecLSTM](#rnn.RecLSTM), the GRU has no cells.
+
+The GRU was benchmark on `PennTreeBank` dataset using [recurrent-language-model.lua](examples/recurrent-language-model.lua) script.
+It slightly outperfomed [FastLSTM](https://github.com/torch/rnn/blob/master/deprecated/README.md#rnn.FastLSTM) (deprecated), however, since LSTMs have more parameters than GRUs,
+the dataset larger than `PennTreeBank` might change the performance result.
+Don't be too hasty to judge on which one is the better of the two (see Ref. C and D).
+
+```
+                Memory   examples/s
+    FastLSTM      176M        16.5K
+    GRU            92M        15.8K
+```
+
+__Memory__ is measured by the size of `dp.Experiment` save file. __examples/s__ is measured by the training speed at 1 epoch, so, it may have a disk IO bias.
+
+![GRU-BENCHMARK](doc/image/gru-benchmark.png)
+
+RNN dropout (see Ref. E and F) was benchmark on `PennTreeBank` dataset using `recurrent-language-model.lua` script, too. The details can be found in the script. In the benchmark, `GRU` utilizes a dropout after `LookupTable`, while `BGRU`, stands for Bayesian GRUs, uses dropouts on inner connections (naming as Ref. F), but not after `LookupTable`.
+
+As Yarin Gal (Ref. F) mentioned, it is recommended that one may use `p = 0.25` for the first attempt.
+
+![GRU-BENCHMARK](doc/image/bgru-benchmark.png)

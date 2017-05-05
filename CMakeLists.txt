@@ -22,7 +22,7 @@ SET(luasrc
   Dropout.lua
   ExpandAs.lua
   deprecated/FastLSTM.lua
-  GRU.lua
+  deprecated/GRU.lua
   LinearNoBias.lua
   LookupTableMaskZero.lua
   deprecated/LSTM.lua
@@ -51,6 +51,8 @@ SET(luasrc
   VariableLength.lua
   StepLSTM.lua
   RecLSTM.lua
+  StepGRU.lua
+  RecGRU.lua
   utils.lua
   LinearRNN.lua
   LookupRNN.lua

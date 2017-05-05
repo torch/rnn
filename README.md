@@ -8,8 +8,8 @@ Modules that consider successive calls to `forward` as different time-steps in a
  * [AbstractRecurrent](#rnn.AbstractRecurrent) : an abstract class inherited by `Recurrence` and `RecLSTM`;
  * [LookupRNN](#rnn.LookupRNN): implements a simple RNN where the input layer is a `LookupTable`;
  * [LinearRNN](#rnn.LinearRNN): implements a simple RNN where the input layer is a `Linear`;
- * [RecLSTM](#rnn.RecLSTM) : a faster LSTM (based on `SeqLSTM`) that doesn't use peephole connections;
- * [GRU](#rnn.GRU) : Gated Recurrent Units module;
+ * [RecLSTM](#rnn.RecLSTM) : an LSTM that can be used for real-time RNNs;
+ * [RecGRU](#rnn.RecGRU) : an GRU that can be used for real-time RNNs;
  * [Recursor](#rnn.Recursor) : decorates a module to make it conform to the [AbstractRecurrent](#rnn.AbstractRecurrent) interface;
  * [Recurrence](#rnn.Recurrence) : decorates a module that outputs `output(t)` given `{input(t), output(t-1)}`;
  * [NormStabilizer](#rnn.NormStabilizer) : implements [norm-stabilization](http://arxiv.org/abs/1511.08400) criterion (add this module between RNNs);
@@ -19,7 +19,7 @@ Modules that `forward` entire sequences through a decorated `AbstractRecurrent` 
  * [AbstractSequencer](#rnn.AbstractSequencer) : an abstract class inherited by Sequencer, Repeater, RecurrentAttention, etc.;
  * [Sequencer](#rnn.Sequencer) : applies an encapsulated module to all elements in an input sequence  (Tensor or Table);
  * [SeqLSTM](#rnn.SeqLSTM) : a faster version of `nn.Sequencer(nn.RecLSTM)` where the `input` and `output` are tensors;
- * [SeqGRU](#rnn.SeqGRU) : a very fast version of `nn.Sequencer(nn.GRU)` where the `input` and `output` are tensors;
+ * [SeqGRU](#rnn.SeqGRU) : a faster version of `nn.Sequencer(nn.RecGRU)` where the `input` and `output` are tensors;
  * [SeqBRNN](#rnn.SeqBRNN) : Bidirectional RNN based on SeqLSTM;
  * [BiSequencer](#rnn.BiSequencer) : used for implementing Bidirectional RNNs and LSTMs;
  * [BiSequencerLM](#rnn.BiSequencerLM) : used for implementing Bidirectional RNNs and LSTMs for language models;
@@ -138,7 +138,7 @@ If that doesn't fix it, open and issue on github.
 
 <a name='rnn.AbstractRecurrent'></a>
 ## AbstractRecurrent ##
-An abstract class inherited by [Recurrence](#rnn.Recurrence), [RecLSTM](#rnn.RecLSTM) and [GRU](#rnn.GRU).
+An abstract class inherited by [Recurrence](#rnn.Recurrence), [RecLSTM](#rnn.RecLSTM) and [GRU](#rnn.RecGRU).
 The constructor takes a single argument :
 ```lua
 rnn = nn.AbstractRecurrent(stepmodule)
@@ -471,8 +471,8 @@ References :
  ![LSTM](doc/image/LSTM.png)
 
 Internally, `RecLSTM` uses a single module [StepLSTM](#rnn.StepLSTM), which is cloned (with shared parameters) for each time-step.
-The speedup is obtained by computing every time-step using a single module.
-This also makes the model memory efficient.
+A 2.0x speedup is obtained by computing every time-step using a single specialized module instead of using multiple basic *nn* modules.
+This also makes the model about 7.5x more memory efficient.
 
 The algorithm for `RecLSTM` is as follows:
 ```lua
@@ -536,8 +536,8 @@ or `nn.StepLSTM(inputsize, hiddensize, outputsize)` (where both `hiddensize` and
 results in the creation of an [LSTMP](#rnn.LSTMP) instead of an LSTM.
 An LSTMP is an LSTM with a projection layer.
 
-<a name='rnn.GRU'></a>
-## GRU ##
+<a name='rnn.RecGRU'></a>
+## RecGRU ##
 
 References :
  * A. [Learning Phrase Representations Using RNN Encoder-Decoder For Statistical Machine Translation.](http://arxiv.org/pdf/1406.1078.pdf)
@@ -547,13 +547,11 @@ References :
  * E. [RnnDrop: A Novel Dropout for RNNs in ASR](http://www.stat.berkeley.edu/~tsmoon/files/Conference/asru2015.pdf)
  * F. [A Theoretically Grounded Application of Dropout in Recurrent Neural Networks](http://arxiv.org/abs/1512.05287)
 
-This is an implementation of Gated Recurrent Units module.
+This is an implementation of gated recurrent units (GRU) module.
 
-The `nn.GRU(inputSize, outputSize [,rho [,p [, mono]]])` constructor takes 3 arguments likewise `nn.LSTM` or 4 arguments for dropout:
- * `inputSize` : a number specifying the size of the input;
- * `outputSize` : a number specifying the size of the output;
- * `rho` : the maximum amount of backpropagation steps to take back in time. Limits the number of previous steps kept in memory. Defaults to 9999;
- * `p` : dropout probability for inner connections of GRUs.
+The `nn.RecGRU(inputsize, outputsize)` constructor takes 2 arguments likewise `nn.RecLSTM`:
+ * `inputsize` : a number specifying the size of the input;
+ * `outputsize` : a number specifying the size of the output;
 
 ![GRU](http://d3kbpzbmcynnmx.cloudfront.net/wp-content/uploads/2015/10/Screen-Shot-2015-10-23-at-10.36.51-AM.png)
 
@@ -566,40 +564,37 @@ s[t] = (1-z[t])h[t] + z[t]s[t-1]                           (4)
 ```
 where `W[s->q]` is the weight matrix from `s` to `q`, `t` indexes the time-step, `b[1->q]` are the biases leading into `q`, `σ()` is `Sigmoid`, `x[t]` is the input and `s[t]` is the output of the module (eq. 4). Note that unlike the [RecLSTM](#rnn.RecLSTM), the GRU has no cells.
 
-The GRU was benchmark on `PennTreeBank` dataset using [recurrent-language-model.lua](examples/recurrent-language-model.lua) script.
-It slightly outperfomed [FastLSTM](https://github.com/torch/rnn/blob/master/deprecated/README.md#rnn.FastLSTM) (deprecated), however, since LSTMs have more parameters than GRUs,
-the dataset larger than `PennTreeBank` might change the performance result.
-Don't be too hasty to judge on which one is the better of the two (see Ref. C and D).
+Internally, `RecGRU` uses a single module [StepGRU](#rnn.StepGRU), which is cloned (with shared parameters) for each time-step.
+A 1.9x speedup is obtained by computing every time-step using a single specialized module instead of using multiple basic *nn* modules.
+This also makes the model about 13.7 times more memory efficient.
 
-```
-                Memory   examples/s
-    FastLSTM      176M        16.5K
-    GRU            92M        15.8K
-```
+<a name='rnn.StepGRU'></a>
+### StepGRU ###
 
-__Memory__ is measured by the size of `dp.Experiment` save file. __examples/s__ is measured by the training speed at 1 epoch, so, it may have a disk IO bias.
-
-![GRU-BENCHMARK](doc/image/gru-benchmark.png)
-
-RNN dropout (see Ref. E and F) was benchmark on `PennTreeBank` dataset using `recurrent-language-model.lua` script, too. The details can be found in the script. In the benchmark, `GRU` utilizes a dropout after `LookupTable`, while `BGRU`, stands for Bayesian GRUs, uses dropouts on inner connections (naming as Ref. F), but not after `LookupTable`.
-
-As Yarin Gal (Ref. F) mentioned, it is recommended that one may use `p = 0.25` for the first attempt.
-
-![GRU-BENCHMARK](doc/image/bgru-benchmark.png)
-
-### SAdd
-
-To implement `GRU`, a simple module is added, which cannot be possible to build only using `nn` modules.
+`StepGRU` is a step-wise module that can be used inside an `AbstractRecurrent` module to implement an GRU.
+For example, `StepGRU` can be combined with [Recurrence](#rnn.Recurrence) (an `AbstractRecurrent` instance for create generic RNNs)
+to create an GRU:
 
 ```lua
-module = nn.SAdd(addend, negate)
+local stepgru = nn.StepGRU(inputsize, outputsize)
+local recgru = nn.Recurrence(stepmodule, outputsize, 1)
 ```
-Applies a single scalar addition to the incoming data, i.e. y_i = x_i + b, then negate all components if `negate` is true. Which is used to implement `s[t] = (1-z[t])h[t] + z[t]s[t-1]` of `GRU` (see above Equation (4)).
 
+The above `recgru` is functionally equivalent to a `RecGRU`, although the latter is slightly more efficient.
+
+The `StepGRU` thus efficiently implements a single GRU time-step.
+Its efficient because it doesn't use any internal modules; it calls BLAS directly.
+`StepGRU` is based on `SeqGRU`.
+
+The `input` to `StepGRU` looks like:
 ```lua
-nn.SAdd(-1, true)
+{input[t], hidden[t-1]}
 ```
-Here, if the incoming data is `z[t]`, then the output becomes `-(z[t]-1)=1-z[t]`. Notice that `nn.Mul()` multiplies a scalar which is a learnable parameter.
+where `t` indexes the time-step.
+The `output` is:
+```lua
+hidden[t]
+```
 
 <a name='rnn.MuFuRu'></a>
 ## MuFuRu ##
@@ -625,7 +620,7 @@ v[t] = tanh(W[x->v]x[t] + W[sr->v](s[t−1]r[t]) + b[1->v])  (2)
 
 where `W[a->b]` denotes the weight matrix from activation `a` to `b`, `t` denotes the time step, `b[1->a]` is the bias for activation `a`, and `s[t-1]r[t]` is the element-wise multiplication of the two vectors.
 
-Unlike in the GRU, rather than computing a single update gate (`z[t]` in [GRU](#rnn.GRU)), MuFuRU computes a weighting over an arbitrary number of composition operators.
+Unlike in the GRU, rather than computing a single update gate (`z[t]` in [GRU](#rnn.RecGRU)), MuFuRU computes a weighting over an arbitrary number of composition operators.
 
 A composition operator is any differentiable operator which takes two vectors of the same size, the previous hidden state, and a new feature vector, and returns a new vector representing the new hidden state. The GRU implicitly defines two such operations, `keep` and `replace`, defined as `keep(s[t-1], v[t]) = s[t-1]` and `replace(s[t-1], v[t]) = v[t]`.
 

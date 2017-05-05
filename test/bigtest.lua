@@ -466,7 +466,6 @@ function rnnbigtest.NCE_benchmark()
    print("total (1 vs 2 gpu)", total1, total2, total2/total1)
 end
 
-
 function rnnbigtest.LSTM()
    local seqlen, batchsize = 30, 32
    local inputsize, outputsize = 128, 128
@@ -531,6 +530,69 @@ function rnnbigtest.LSTM()
 
    for i,name in ipairs{'fast','step','rec','seq'} do
       print(name..' LSTM memory: '..lstms[name].fullsize/(1024*1024)..':'..lstms[name].clearsize/(1024*1024)..' MB')
+   end
+end
+
+function rnnbigtest.GRU()
+   local seqlen, batchsize = 30, 32
+   local inputsize, outputsize = 128, 128
+   local nloop = 20
+
+   local grus = {}
+   grus.old = nn.Sequencer(nn.GRU(inputsize, outputsize))
+   local stepmodule = nn.StepGRU(inputsize, outputsize)
+   local recmodule = nn.Recurrence(stepmodule, outputsize, 1, seqlen)
+   grus.step = nn.Sequencer(recmodule)
+   grus.rec = nn.Sequencer(nn.RecGRU(inputsize, outputsize))
+   local luarec = nn.RecGRU(inputsize, outputsize)
+   luarec.modules[1].forceLua = true
+   grus.luarec = nn.Sequencer(luarec)
+   grus.seq = nn.SeqGRU(inputsize, outputsize)
+   grus.luaseq = nn.SeqGRU(inputsize, outputsize)
+   grus.luaseq.forceLua = true
+
+   local input = torch.Tensor(seqlen, batchsize, inputsize)
+   local gradOutput = torch.Tensor(seqlen, batchsize, outputsize)
+
+   local t = torch.Timer()
+
+   print("CPU test")
+
+   for name, gru in pairs(grus) do
+       -- warmup
+      gru:remember('neither')
+      gru:forward(input)
+      gru:zeroGradParameters()
+      gru:backward(input, gradOutput)
+      -- main test
+      t:reset()
+      for i=1,nloop do
+         gru:forward(input)
+         gru:zeroGradParameters()
+         gru:backward(input, gradOutput)
+      end
+      gru.testtime = t:time().real/nloop
+   end
+
+   for i,name in ipairs{'old','step','luarec','rec', 'luaseq', 'seq'} do
+      print(name..' GRU time: '..grus[name].testtime..' seconds')
+   end
+
+   print("RecGRU-C "..(grus.luarec.testtime/grus.rec.testtime)..' faster than RecGRU-Lua')
+   print("RecGRU "..(grus.old.testtime/grus.rec.testtime)..' faster than old GRU')
+   print("SeqGRU "..(grus.rec.testtime/grus.seq.testtime)..' faster than RecGRU')
+   print("SeqGRU-C "..(grus.luaseq.testtime/grus.seq.testtime)..' faster than SeqGRU-Lua')
+
+   print("Memory test")
+
+   for name, gru in pairs(grus) do
+      gru.fullsize = #torch.serialize(gru)
+      gru:clearState()
+      gru.clearsize = #torch.serialize(gru)
+   end
+
+   for i,name in ipairs{'old','step','rec','seq'} do
+      print(name..' GRU memory: '..grus[name].fullsize/(1024*1024)..':'..grus[name].clearsize/(1024*1024)..' MB')
    end
 end
 

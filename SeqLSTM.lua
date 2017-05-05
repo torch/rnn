@@ -79,15 +79,7 @@ function SeqLSTM:__init(inputsize, hiddensize, outputsize)
    self.v2 = true
 end
 
-function SeqLSTM:reset(std)
-   self.bias:zero()
-   self.bias[{{self.outputsize + 1, 2 * self.outputsize}}]:fill(1)
-   self.weight:normal(0, std or (1.0 / math.sqrt(self.hiddensize + self.inputsize)))
-   if self.weightO then
-      self.weightO:normal(0, std or (1.0 / math.sqrt(self.outputsize + self.hiddensize)))
-   end
-   return self
-end
+SeqLSTM.reset = nn.StepLSTM.reset
 
 function SeqLSTM:zeroMaskState(state, step, cur_x)
    if self.maskzero and self.zeroMask ~= false then
@@ -97,6 +89,18 @@ function SeqLSTM:zeroMaskState(state, step, cur_x)
       else -- backwards compat
          self.zeroMask = nn.utils.getZeroMaskBatch(cur_x, self.zeroMask)
          nn.utils.recursiveZeroMask(state, self.zeroMask)
+      end
+   end
+end
+
+function SeqLSTM:checkZeroMask(seqlen, batchsize)
+   if self.maskzero and self.v2 and self.zeroMask ~= false then
+      if not torch.isTensor(self.zeroMask) then
+         error(torch.type(self).." expecting previous call to setZeroMask(zeroMask) with maskzero=true")
+      end
+      if (self.zeroMask:size(1) ~= seqlen) or (self.zeroMask:size(2) ~= batchsize) then
+         error(torch.type(self).." expecting zeroMask of size seqlen x batchsize, got "
+            ..self.zeroMask:size(1).." x "..self.zeroMask:size(2).." instead of "..seqlen.." x "..batchsize )
       end
    end
 end
@@ -117,15 +121,7 @@ function SeqLSTM:updateOutput(input)
    local seqlen, batchsize = input:size(1), input:size(2)
    local inputsize, hiddensize, outputsize = self.inputsize, self.hiddensize, self.outputsize
 
-   if self.maskzero and self.v2 and self.zeroMask ~= false then
-      if not torch.isTensor(self.zeroMask) then
-         error(torch.type(self).." expecting previous call to setZeroMask(zeroMask) with maskzero=true")
-      end
-      if (self.zeroMask:size(1) ~= seqlen) or (self.zeroMask:size(2) ~= batchsize) then
-         error(torch.type(self).." expecting zeroMask of size seqlen x batchsize, got "
-            ..self.zeroMask:size(1).." x "..self.zeroMask:size(2).." instead of "..seqlen.." x "..batchsize )
-      end
-   end
+   self:checkZeroMask(seqlen, batchsize)
 
    -- remember previous state?
    local remember = self:hasMemory()
@@ -352,9 +348,6 @@ function SeqLSTM:clearState()
    self.hidden = nil
 
    self.zeroMask = nil
-   self._zeroMask = nil
-   self._maskbyte = nil
-   self._maskindices = nil
 end
 
 function SeqLSTM:updateGradInput(input, gradOutput)
@@ -376,10 +369,7 @@ function SeqLSTM:forget()
 end
 
 function SeqLSTM:type(type, ...)
-   self.zeroMask = nil
-   self._zeroMask = nil
-   self._maskbyte = nil
-   self._maskindices = nil
+   self:clearState()
    return parent.type(self, type, ...)
 end
 
