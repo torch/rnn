@@ -38,11 +38,7 @@ require('rnn.Dropout')
 require('rnn.Criterion')
 
 -- decorator modules
-require('rnn.Decorator')
 require('rnn.Serial')
-require('rnn.DontCast')
-require('rnn.NaN')
-require('rnn.Profile')
 
 -- extensions to make serialization more efficient
 require('rnn.SpatialMaxPooling')
@@ -134,7 +130,6 @@ require('rnn.RecurrentAttention')
 
 -- sequencer + recurrent modules
 require('rnn.SeqLSTM')
-require('rnn.SeqLSTMP')
 require('rnn.SeqGRU')
 require('rnn.SeqReverseSequence')
 require('rnn.SeqBRNN')

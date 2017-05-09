@@ -68,9 +68,7 @@ SET(luasrc
   Container.lua
   Convert.lua
   Criterion.lua
-  Decorator.lua
   Dictionary.lua
-  DontCast.lua
   FireModule.lua
   Inception.lua
   Kmeans.lua
@@ -78,12 +76,10 @@ SET(luasrc
   ModuleCriterion.lua
   NCECriterion.lua
   NCEModule.lua
-  NaN.lua
   OneHot.lua
   PCAColorTransform.lua
   ParallelTable.lua
   PrintSize.lua
-  Profile.lua
   Reinforce.lua
   ReinforceBernoulli.lua
   ReinforceCategorical.lua

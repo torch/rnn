@@ -31,7 +31,7 @@ static int nn_(StepLSTM_updateOutput)(lua_State *L) {
   THTensor_(resize2d)(next_c, batchsize, hiddensize);
 
   THTensor_(resize2d)(gates, batchsize, 4 * hiddensize);
-  THTensor_(fill)(gates, 0);
+  //THTensor_(fill)(gates, 0);
 
   // forward
   THTensor_(addmm)(gates, 1, buffer, 1, cur_x, Wx);
@@ -203,7 +203,7 @@ static int nn_(StepLSTM_backward)(lua_State *L) {
   THTensor_(addmm)(grad_Wx, 1, grad_Wx, scale, cur_x_t, grad_gates);
   THTensor_(addmm)(grad_Wh, 1, grad_Wh, scale, prev_h_t, grad_gates);
   THTensor_(resize2d)(grad_gates_sum, 1, 4 * hiddensize);
-  THTensor_(sum)(grad_gates_sum, grad_gates, 0);
+  THTensor_(sum)(grad_gates_sum, grad_gates, 0, 0);
   THTensor_(cadd)(grad_b, grad_b, scale, grad_gates_sum);
 
   THTensor_(addmm)(grad_prev_h, 0, grad_prev_h, 1, grad_gates, Wh_t);

@@ -131,7 +131,7 @@ static int nn_(StepGRU_backward)(lua_State *L) {
   THTensor_(addmm)(sub_grad_Wh, scale, sub_grad_Wh, 1, prev_h_t, sub_grad_gates);
 
   THTensor_(resize1d)(buffer, outputsize);
-  THTensor_(sum)(buffer, grad_gates, 0);
+  THTensor_(sum)(buffer, grad_gates, 0, 0);
   THTensor_(cadd)(grad_b, grad_b, scale, buffer);
   THTensor_(cmul)(buffer, prev_h, reset_gate);
 
