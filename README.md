@@ -50,11 +50,7 @@ We also redefined [type](#nn.Module.type) such that the type-cast preserves Tens
 
 The package provides the following Modules:
 
- * [Decorator](#nn.Decorator) : abstract class to change the behaviour of an encapsulated module ;
- * [DontCast](#nn.DontCast) : prevent encapsulated module from being casted by `Module:type()` ;
  * [Serial](#nn.Serial) : decorate a module makes its serialized output more compact ;
- * [NaN](#nn.NaN) : decorate a module to detect the source of NaN errors ;
- * [Profile](#nn.Profile) : decorate a module to time its forwards and backwards passes ;
  * [Inception](#nn.Inception) : implements the Inception module of the GoogleLeNet article ;
  * [Collapse](#nn.Collapse) : just like `nn.View(-1)`;
  * [Convert](#nn.Convert) : convert between different tensor types or shapes;
@@ -1604,38 +1600,6 @@ i.e. each example in a batch has its own scalar reward.
 Refer to [this example](https://github.com/Element-Research/rnn/blob/master/examples/recurrent-visual-attention.lua)
 for a complete training script making use of the REINFORCE interface.
 
-<a name='nn.Decorator'></a>
-## Decorator ##
-
-```lua
-dmodule = nn.Decorator(module)
-```
-
-This module is an abstract class used to decorate a `module`. This means
-that method calls to `dmodule` will call the same method on the encapsulated
-`module`, and return its results.
-
-<a name='nn.DontCast'></a>
-## DontCast ##
-
-```lua
-dmodule = nn.DontCast(module)
-```
-
-This module is a decorator. Use it to decorate a module that you don't
-want to be cast when the `type()` method is called.
-
-```lua
-module = nn.DontCast(nn.Linear(3,4):float())
-module:double()
-th> print(module:forward(torch.FloatTensor{1,2,3}))
- 1.0927
--1.9380
--1.8158
--0.0805
-[torch.FloatTensor of size 4]
-```
-
 <a name='nn.Serial'></a>
 ## Serial ##
 
@@ -1669,107 +1633,6 @@ attribute `dpnn_gradParameters`, which defaults to `{gradWeight, gradBias}`.
 
 We recomment using `mediumSerial()` for training, and `lightSerial()` for
 production (feed-forward-only models).
-
-<a name='nn.NaN'></a>
-## NaN ##
-
-```lua
-dmodule = nn.NaN(module, [id])
-```
-
-The `NaN` module asserts that the `output` and `gradInput` of the decorated `module` do not contain NaNs.
-This is useful for locating the source of those pesky NaN errors.
-The `id` defaults to automatically incremented values of `1,2,3,...`.
-
-For example :
-
-```lua
-linear = nn.Linear(3,4)
-mlp = nn.Sequential()
-mlp:add(nn.NaN(nn.Identity()))
-mlp:add(nn.NaN(linear))
-mlp:add(nn.NaN(nn.Linear(4,2)))
-print(mlp)
-```
-
-As you can see the `NaN` layers are have unique ids :
-
-```lua
-nn.Sequential {
-  [input -> (1) -> (2) -> (3) -> output]
-  (1): nn.NaN(1) @ nn.Identity
-  (2): nn.NaN(2) @ nn.Linear(3 -> 4)
-  (3): nn.NaN(3) @ nn.Linear(4 -> 2)
-}
-```
-
-And if we fill the `bias` of the linear module with NaNs and call `forward`:
-
-```lua
-nan = math.log(math.log(0)) -- this is a nan value
-linear.bias:fill(nan)
-mlp:forward(torch.randn(2,3))
-```
-
-We get a nice error message:
-```lua
-/usr/local/share/lua/5.1/dpnn/NaN.lua:39: NaN found in parameters of module :
-nn.NaN(2) @ nn.Linear(3 -> 4)
-```
-
-For a quick one-liner to catch NaNs anywhere inside a model (for example, a `nn.Sequential` or any other `nn.Container`), we can use this with the `nn.Module.replace` function:
-```lua
-model:replace(function(module) return nn.NaN(module) end)
-```
-
-<a name='nn.Profile'></a>
-## Profile ##
-
-```lua
-dmodule = nn.Profile(module, [print_interval, [name] ])
-```
-
-The `Profile` module times each forward and backward pass of the decorated `module`. It prints this information after `print_interval` passes, which is `100` by default. For timing multiple modules, the `name` argument allows this information to be printed accompanied by a name, which by default is the type of the decorated `module`.
-
-This is useful for profiling new modules you develop, and tracking down bottlenecks in the speed of a network.
-
-The timer and print statement can add a small amount of overhead to the overall speed.
-
-As an example:
-
-```lua
-mlp = nn.Sequential()
-mlp:add(nn.Identity())
-mlp:add(nn.Linear(1000,1000))
-mlp:add(nn.Tanh())
-mlp:replace(function(module) return nn.Profile(module, 1000) end)
-inp = torch.randn(1000)
-gradOutput = torch.randn(1000)
-for i=1,1000 do
-   mlp:forward(inp)
-   mlp:backward(inp, gradOutput)
-end
-```
-
-results in the following profile information:
-
-```
-nn.Identity took 0.026 seconds for 1000 forward passes
-nn.Linear took 0.119 seconds for 1000 forward passes
-nn.Tanh took 0.061 seconds for 1000 forward passes
-nn.Tanh took 0.032 seconds for 1000 backward passes
-nn.Linear took 0.161 seconds for 1000 backward passes
-nn.Identity took 0.026 seconds for 1000 backward passes
-```
-
-It's good practice to profile modules after a single forwards and backwards pass, since the initial pass often has to allocate memory. Thus, in the example above, you would run another 1000 forwards and backwards passes to time the modules in their normal mode of operation:
-
-```
-for i=1,1000 do
-   mlp:forward(inp)
-   mlp:backward(inp, gradOutput)
-end
-```
 
 <a name='nn.Inception'></a>
 ## Inception ##

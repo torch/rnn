@@ -143,9 +143,9 @@ function SeqLSTM:updateOutput(input)
    end
 
    local h, c = self.output, self.cell
-   h:resize(seqlen, batchsize, outputsize):zero()
-   c:resize(seqlen, batchsize, hiddensize):zero()
-   self.gates:resize(seqlen, batchsize, 4 * hiddensize):zero()
+   h:resize(seqlen, batchsize, outputsize)
+   c:resize(seqlen, batchsize, hiddensize)
+   self.gates:resize(seqlen, batchsize, 4 * hiddensize)
 
    local prev_h, prev_c = h0, c0
    if input.nn.StepLSTM_updateOutput and not self.forceLua then
@@ -154,7 +154,7 @@ function SeqLSTM:updateOutput(input)
 
          if self.weightO then
             self._hidden = self._hidden or next_h.new()
-            self._hidden:resize(seqlen, batchsize, self.hiddensize)
+            self._hidden:resize(seqlen, batchsize, hiddensize)
             cur_x.nn.StepLSTM_updateOutput(self.weight, self.bias,
                                            gates, cur_x, prev_h, prev_c,
                                            inputsize, hiddensize, outputsize,
@@ -203,6 +203,7 @@ function SeqLSTM:updateOutput(input)
 
          prev_h, prev_c = next_h, next_c
       end
+
    end
 
    return self.output
