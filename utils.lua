@@ -34,6 +34,14 @@ function torch.isByteTensor(tensor)
    return false
 end
 
+function torch.isCudaTensor(tensor)
+   local typename = torch.typename(tensor)
+   if typename and typename:find('torch.Cuda*Tensor') then
+      return true
+   end
+   return false
+end
+
 function nn.utils.getZeroMaskBatch(batch, zeroMask)
    -- get first tensor
    local first = nn.utils.recursiveGetFirst(batch)

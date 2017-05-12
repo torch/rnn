@@ -37,7 +37,7 @@ end
 function StepGRU:updateOutput(input)
    self.recompute_backward = true
    local cur_x, prev_h, next_h = input[1], input[2], self.output
-   if cur_x.nn.StepGRU_updateOutput and not self.forceLua then
+   if cur_x.nn and cur_x.nn.StepGRU_updateOutput and not self.forceLua then
       cur_x.nn.StepGRU_updateOutput(self.weight, self.bias, self.gates,
                                     cur_x, prev_h,
                                     self.inputsize, self.outputsize,
@@ -101,7 +101,7 @@ function StepGRU:backward(input, gradOutput, scale)
       nn.utils.recursiveZeroMask(grad_next_h, self.zeroMask)
    end
 
-   if cur_x.nn.StepGRU_backward and not self.forceLua then
+   if cur_x.nn and cur_x.nn.StepGRU_backward and not self.forceLua then
       cur_x.nn.StepGRU_backward(self.weight, self.gates,
                                 self.gradWeight, self.gradBias, grad_gates, buffer,
                                 cur_x, prev_h, grad_next_h,

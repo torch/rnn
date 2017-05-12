@@ -100,7 +100,7 @@ function SeqGRU:updateOutput(input)
    self.gates:resize(seqlen, batchsize, 3 * outputsize):zero()
 
    local prev_h = h0
-   if input.nn.StepGRU_updateOutput and not self.forceLua then
+   if input.nn and input.nn.StepGRU_updateOutput and not self.forceLua then
       for t = 1, seqlen do
          local cur_x, next_h, gates = input[t], h[t], self.gates[t]
          cur_x.nn.StepGRU_updateOutput(self.weight, self.bias,
@@ -152,7 +152,7 @@ function SeqGRU:backward(input, gradOutput, scale)
    self.gradInput:resizeAs(input):zero()
 
    local grad_next_h = self.grad_hT or self.buffer1:zero()
-   if input.nn.StepGRU_backward and not self.forceLua then
+   if input.nn and input.nn.StepGRU_backward and not self.forceLua then
       for t = seqlen, 1, -1 do
          local cur_x, next_h = input[t], h[t]
          local prev_h = (t == 1) and self.h0 or h[t - 1]
