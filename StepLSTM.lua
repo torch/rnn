@@ -82,8 +82,12 @@ function StepLSTM:updateOutput(input)
       next_h:resize(batchsize, hiddensize)
       next_c:resize(batchsize, hiddensize)
 
-      self.gates:resize(batchsize, 4 * hiddensize):zero()
       local gates = self.gates
+      local nElement = gates:nElement()
+      gates:resize(batchsize, 4 * hiddensize)
+      if gates:nElement() ~= batchsize * 4 * hiddensize then
+         gates:zero()
+      end
 
       -- forward
       gates:addmm(bias_expand, cur_x, Wx)
@@ -182,7 +186,8 @@ function StepLSTM:backward(input, gradOutput, scale)
       local output_gate = gates[{{}, {2 * hiddensize + 1, 3 * hiddensize}}]
       local input_transform = gates[{{}, {3 * hiddensize + 1, 4 * hiddensize}}]
 
-      grad_gates:resize(batchsize, 4 * hiddensize):zero()
+      grad_gates:resize(batchsize, 4 * hiddensize)
+
       local grad_input_gate = grad_gates[{{}, {1, hiddensize}}]
       local grad_forget_gate = grad_gates[{{}, {hiddensize + 1, 2 * hiddensize}}]
       local grad_output_gate = grad_gates[{{}, {2 * hiddensize + 1, 3 * hiddensize}}]

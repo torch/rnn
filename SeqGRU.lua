@@ -97,7 +97,12 @@ function SeqGRU:updateOutput(input)
 
    local h = self.output
    h:resize(seqlen, batchsize, outputsize):zero()
-   self.gates:resize(seqlen, batchsize, 3 * outputsize):zero()
+
+   local nElement = self.gates:nElement()
+   self.gates:resize(seqlen, batchsize, 3 * outputsize)
+   if nElement ~= seqlen * batchsize * 3 * outputsize then
+      self.gates:zero()
+   end
 
    local prev_h = h0
    if input.nn and input.nn.StepGRU_updateOutput and not self.forceLua then
@@ -184,7 +189,8 @@ function SeqGRU:backward(input, gradOutput, scale)
          local u = self.gates[{t, {}, {outputsize + 1, 2 * outputsize}}]
          local hc = self.gates[{t, {}, {2 * outputsize + 1, 3 * outputsize}}]
 
-         local grad_a = self.grad_a_buffer:resize(batchsize, 3 * outputsize):zero()
+         local grad_a = self.grad_a_buffer:resize(batchsize, 3 * outputsize)
+
          local grad_ar = grad_a[{{}, {1, outputsize}}]
          local grad_au = grad_a[{{}, {outputsize + 1, 2 * outputsize}}]
          local grad_ahc = grad_a[{{}, {2 * outputsize + 1, 3 * outputsize}}]
@@ -192,7 +198,7 @@ function SeqGRU:backward(input, gradOutput, scale)
          -- use grad_au as temporary buffer to compute grad_ahc.
 
          local grad_hc = grad_au:fill(0):addcmul(grad_next_h, -1, u, grad_next_h)
-         grad_ahc:fill(1):addcmul(-1, hc,hc):cmul(grad_hc)
+         grad_ahc:fill(1):addcmul(-1, hc, hc):cmul(grad_hc)
          local grad_r = grad_au:fill(0):addmm(grad_ahc, Wh[{{}, {2 * outputsize + 1, 3 * outputsize}}]:t() ):cmul(prev_h)
          grad_ar:fill(1):add(-1, r):cmul(r):cmul(grad_r)
 

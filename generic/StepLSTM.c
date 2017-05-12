@@ -29,9 +29,10 @@ static int nn_(StepLSTM_updateOutput)(lua_State *L) {
 
   THTensor_(resize2d)(next_h, batchsize, hiddensize);
   THTensor_(resize2d)(next_c, batchsize, hiddensize);
-
+  long nElement = THTensor_(nElement)(gates);
   THTensor_(resize2d)(gates, batchsize, 4 * hiddensize);
-  //THTensor_(fill)(gates, 0);
+  if (nElement != batchsize * 4 * hiddensize)
+    THTensor_(fill)(gates, 0);
 
   // forward
   THTensor_(addmm)(gates, 1, buffer, 1, cur_x, Wx);
@@ -147,7 +148,6 @@ static int nn_(StepLSTM_backward)(lua_State *L) {
   THTensor *grad_Wh = THTensor_(newNarrow)(gradWeight, 0, inputsize, outputsize);
 
   THTensor_(resize2d)(grad_gates, batchsize, 4 * hiddensize);
-  THTensor_(fill)(grad_gates, 0);
 
   THTensor *grad_input_gate = THTensor_(newNarrow)(grad_gates, 1, 0, hiddensize);
   THTensor *grad_forget_gate = THTensor_(newNarrow)(grad_gates, 1, hiddensize, hiddensize);

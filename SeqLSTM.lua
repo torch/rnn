@@ -145,7 +145,12 @@ function SeqLSTM:updateOutput(input)
    local h, c = self.output, self.cell
    h:resize(seqlen, batchsize, outputsize)
    c:resize(seqlen, batchsize, hiddensize)
+
+   local nElement = self.gates:nElement()
    self.gates:resize(seqlen, batchsize, 4 * hiddensize)
+   if nElement ~= seqlen * batchsize * 4 * hiddensize then
+      self.gates:zero()
+   end
 
    local prev_h, prev_c = h0, c0
    if input.nn and input.nn.StepLSTM_updateOutput and not self.forceLua then
