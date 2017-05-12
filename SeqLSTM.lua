@@ -145,10 +145,15 @@ function SeqLSTM:updateOutput(input)
    local h, c = self.output, self.cell
    h:resize(seqlen, batchsize, outputsize)
    c:resize(seqlen, batchsize, hiddensize)
+
+   local nElement = self.gates:nElement()
    self.gates:resize(seqlen, batchsize, 4 * hiddensize)
+   if nElement ~= seqlen * batchsize * 4 * hiddensize then
+      self.gates:zero()
+   end
 
    local prev_h, prev_c = h0, c0
-   if input.nn.StepLSTM_updateOutput and not self.forceLua then
+   if input.nn and input.nn.StepLSTM_updateOutput and not self.forceLua then
       for t = 1, seqlen do
          local cur_x, next_h, next_c, gates = input[t], h[t], c[t], self.gates[t]
 
@@ -225,7 +230,7 @@ function SeqLSTM:backward(input, gradOutput, scale)
 
    local grad_next_h = self.grad_hT or self.buffer1:zero()
    local grad_next_c = self.grad_cT or self.buffer2:zero()
-   if input.nn.StepLSTM_backward and not self.forceLua then
+   if input.nn and input.nn.StepLSTM_backward and not self.forceLua then
       for t = seqlen, 1, -1 do
          local cur_x, next_h, next_c = input[t], h[t], c[t]
          local prev_h, prev_c

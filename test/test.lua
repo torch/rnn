@@ -1562,299 +1562,6 @@ function rnntest.RepeaterCriterion()
 
 end
 
-function rnntest.LSTM_char_rnn()
-   -- benchmark our LSTM against char-rnn's LSTM
-   if not benchmark then
-      return
-   end
-
-   local success = pcall(function()
-         require 'cunn'
-      end)
-   if not success then
-      return
-   end
-
-   local batch_size = 50
-   local input_size = 65
-   local rnn_size = 128
-   local n_layer = 2
-   local seq_len = 50
-
-   local inputs = {}
-   local gradOutputs = {}
-   for i=1,seq_len do
-      table.insert(inputs, torch.Tensor(batch_size):random(1,input_size):cuda())
-      table.insert(gradOutputs, torch.randn(batch_size, input_size):cuda())
-   end
-
-   local a = torch.Timer()
-   local function clone_list(tensor_list, zero_too)
-       -- utility function. todo: move away to some utils file?
-       -- takes a list of tensors and returns a list of cloned tensors
-       local out = {}
-       for k,v in pairs(tensor_list) do
-           out[k] = v:clone()
-           if zero_too then out[k]:zero() end
-       end
-       return out
-   end
-
-   local model_utils = {}
-   function model_utils.combine_all_parameters(...)
-      local con = nn.Container()
-      for i, net in ipairs{...} do
-         con:add(net)
-      end
-      return con:getParameters()
-   end
-
-   function model_utils.clone_many_times(net, T)
-       local clones = {}
-
-       local params, gradParams
-       if net.parameters then
-           params, gradParams = net:parameters()
-           if params == nil then
-               params = {}
-           end
-       end
-
-       local paramsNoGrad
-       if net.parametersNoGrad then
-           paramsNoGrad = net:parametersNoGrad()
-       end
-
-       local mem = torch.MemoryFile("w"):binary()
-       mem:writeObject(net)
-
-       for t = 1, T do
-           -- We need to use a new reader for each clone.
-           -- We don't want to use the pointers to already read objects.
-           local reader = torch.MemoryFile(mem:storage(), "r"):binary()
-           local clone = reader:readObject()
-           reader:close()
-
-           if net.parameters then
-               local cloneParams, cloneGradParams = clone:parameters()
-               local cloneParamsNoGrad
-               for i = 1, #params do
-                   cloneParams[i]:set(params[i])
-                   cloneGradParams[i]:set(gradParams[i])
-               end
-               if paramsNoGrad then
-                   cloneParamsNoGrad = clone:parametersNoGrad()
-                   for i =1,#paramsNoGrad do
-                       cloneParamsNoGrad[i]:set(paramsNoGrad[i])
-                   end
-               end
-           end
-
-           clones[t] = clone
-           collectgarbage()
-       end
-
-       mem:close()
-       return clones
-   end
-
-   local function makeCharLSTM(input_size, rnn_size, n)
-      local dropout = 0
-
-      -- there will be 2*n+1 inputs
-      local inputs = {}
-      table.insert(inputs, nn.Identity()()) -- x
-      for L = 1,n do
-         table.insert(inputs, nn.Identity()()) -- prev_c[L]
-         table.insert(inputs, nn.Identity()()) -- prev_h[L]
-      end
-
-      local x, input_size_L
-      local outputs = {}
-      for L = 1,n do
-         -- c,h from previos timesteps
-         local prev_h = inputs[L*2+1]
-         local prev_c = inputs[L*2]
-         -- the input to this layer
-         if L == 1 then
-            x = nn.OneHot(input_size)(inputs[1])
-            input_size_L = input_size
-         else
-            x = outputs[(L-1)*2]
-            if dropout > 0 then x = nn.Dropout(dropout)(x) end -- apply dropout, if any
-            input_size_L = rnn_size
-         end
-         -- evaluate the input sums at once for efficiency
-         local i2h = nn.Linear(input_size_L, 4 * rnn_size)(x):annotate{name='i2h_'..L}
-         local h2h = nn.LinearNoBias(rnn_size, 4 * rnn_size)(prev_h):annotate{name='h2h_'..L}
-         local all_input_sums = nn.CAddTable()({i2h, h2h})
-
-         local reshaped = nn.Reshape(4, rnn_size)(all_input_sums)
-         local n1, n2, n3, n4 = nn.SplitTable(2)(reshaped):split(4)
-         -- decode the gates
-         local in_gate = nn.Sigmoid()(n1)
-         local forget_gate = nn.Sigmoid()(n2)
-         local out_gate = nn.Sigmoid()(n3)
-         -- decode the write inputs
-         local in_transform = nn.Tanh()(n4)
-         -- perform the LSTM update
-         local next_c           = nn.CAddTable()({
-           nn.CMulTable()({forget_gate, prev_c}),
-           nn.CMulTable()({in_gate,     in_transform})
-         })
-         -- gated cells form the output
-         local next_h = nn.CMulTable()({out_gate, nn.Tanh()(next_c)})
-
-         table.insert(outputs, next_c)
-         table.insert(outputs, next_h)
-      end
-
-      -- set up the decoder
-      local top_h = outputs[#outputs]
-      if dropout > 0 then top_h = nn.Dropout(dropout)(top_h) end
-      local proj = nn.Linear(rnn_size, input_size)(top_h):annotate{name='decoder'}
-      local logsoft = nn.LogSoftMax()(proj)
-      table.insert(outputs, logsoft)
-
-      local lstm = nn.gModule(inputs, outputs):cuda()
-      return lstm
-   end
-
-   -- the initial state of the cell/hidden states
-   local init_state = {}
-   for L=1,n_layer do
-       local h_init = torch.zeros(batch_size, rnn_size):cuda()
-       table.insert(init_state, h_init:clone())
-       table.insert(init_state, h_init:clone())
-   end
-
-   local lstm1 = makeCharLSTM(input_size, rnn_size, n_layer)
-   local crit1 = nn.ClassNLLCriterion()
-   local protos = {rnn=lstm1,criterion=crit1}
-
-   -- make a bunch of clones after flattening, as that reallocates memory
-   local clones = {}
-   for name,proto in pairs(protos) do
-       clones[name] = model_utils.clone_many_times(proto, seq_len, not proto.parameters)
-   end
-
-   -- put the above things into one flattened parameters tensor
-   local params, grad_params = model_utils.combine_all_parameters(lstm1)
-
-   local init_state_global = clone_list(init_state)
-
-   -- do fwd/bwd and return loss, grad_params
-   local function trainCharrnn(x, y, fwdOnly)
-      local rnn_state = {[0] = init_state_global}
-      local predictions = {}           -- softmax outputs
-      local loss = 0
-      for t=1,seq_len do
-        clones.rnn[t]:training() -- make sure we are in correct mode (this is cheap, sets flag)
-        local lst = clones.rnn[t]:forward{x[t], unpack(rnn_state[t-1])}
-        rnn_state[t] = {}
-        for i=1,#init_state do table.insert(rnn_state[t], lst[i]) end -- extract the state, without output
-        predictions[t] = lst[#lst] -- last element is the prediction
-        --loss = loss + clones.criterion[t]:forward(predictions[t], y[t])
-      end
-
-      if not fwdOnly then
-         --loss = loss / seq_len
-         ------------------ backward pass -------------------
-         -- initialize gradient at time t to be zeros (there's no influence from future)
-         local drnn_state = {[seq_len] = clone_list(init_state, true)} -- true also zeros the clones
-         for t=seq_len,1,-1 do
-           -- backprop through loss, and softmax/linear
-           --local doutput_t = clones.criterion[t]:backward(predictions[t], y[t])
-           local doutput_t = y[t]
-           table.insert(drnn_state[t], doutput_t)
-           local dlst = clones.rnn[t]:backward({x[t], unpack(rnn_state[t-1])}, drnn_state[t])
-           drnn_state[t-1] = {}
-           for k,v in pairs(dlst) do
-               if k > 1 then -- k == 1 is gradient on x, which we dont need
-                   -- note we do k-1 because first item is dembeddings, and then follow the
-                   -- derivatives of the state, starting at index 2. I know...
-                   drnn_state[t-1][k-1] = v
-               end
-           end
-         end
-      end
-      ------------------------ misc ----------------------
-      -- transfer final state to initial state (BPTT)
-      init_state_global = rnn_state[#rnn_state]
-   end
-
-   local charrnnsetuptime = a:time().real
-
-   local a = torch.Timer()
-
-   local function makeRnnLSTM(input_size, rnn_size, n)
-      local seq = nn.Sequential()
-         :add(nn.OneHot(input_size))
-
-      local inputSize = input_size
-      for L=1,n do
-         seq:add(nn.RecLSTM(inputSize, rnn_size))
-         inputSize = rnn_size
-      end
-
-      seq:add(nn.Linear(rnn_size, input_size))
-      seq:add(nn.LogSoftMax())
-
-      local lstm = nn.Sequencer(seq)
-
-      lstm:cuda()
-
-      return lstm
-   end
-
-   local lstm2 = makeRnnLSTM(input_size, rnn_size, n_layer, gpu)
-
-   local function trainRnn(x, y, fwdOnly)
-      local outputs = lstm2:forward(x)
-      if not fwdOnly then
-         local gradInputs = lstm2:backward(x, y)
-      end
-   end
-
-   local rnnsetuptime = a:time().real
-
-   -- char-rnn (nngraph)
-
-   local a = torch.Timer()
-   trainCharrnn(inputs, gradOutputs)
-   cutorch.synchronize()
-   charrnnsetuptime = charrnnsetuptime + a:time().real
-   collectgarbage()
-
-   local a = torch.Timer()
-   for i=1,10 do
-      trainCharrnn(inputs, gradOutputs)
-   end
-   cutorch.synchronize()
-   local chartime = a:time().real
-
-   -- rnn
-   local a = torch.Timer()
-   trainRnn(inputs, gradOutputs)
-   cutorch.synchronize()
-   rnnsetuptime = rnnsetuptime + a:time().real
-   collectgarbage()
-   print("Benchmark")
-   print("setuptime : char, rnn, char/rnn", charrnnsetuptime, rnnsetuptime, charrnnsetuptime/rnnsetuptime)
-   local a = torch.Timer()
-   for i=1,10 do
-      trainRnn(inputs, gradOutputs)
-   end
-   cutorch.synchronize()
-   local rnntime = a:time().real
-   print("runtime: char, rnn, char/rnn", chartime, rnntime, chartime/rnntime)
-
-   -- on NVIDIA Titan Black :
-   -- with FastLSTM.usenngraph = true :
-   -- setuptime : char, rnn, char/rnn 1.5920469760895 2.4352579116821 0.65374881586558
-   -- runtime: char, rnn, char/rnn    1.0614919662476 1.124755859375  0.94375322199913
-end
-
 function rnntest.RecLSTM_checkgrad()
    if not pcall(function() require 'optim' end) then return end
 
@@ -2393,6 +2100,9 @@ function rnntest.MaskZeroCriterion()
       if pcall(function() require 'cunn' end) then
          -- test cuda
          mznll:cuda()
+         if v2 then
+            mznll:setZeroMask(zeroMask:cudaByte())
+         end
          local input4 = input:cuda()
          local target4 = target:cuda()
          local err4 = mznll:forward(input4, target4)
@@ -3145,12 +2855,13 @@ function rnntest.SeqLSTM_maskzero()
       local seqlstm = nn.SeqLSTM(D,H)
       local input = torch.randn(T, N, D)
       local gradOutput = torch.randn(T, N, H)
+      local zeroMask = torch.ByteTensor(T, N):random(0,1)
 
       if cunn then
          input = input:cuda()
          gradOutput = gradOutput:cuda()
          seqlstm:cuda()
-         zeroMask = zeroMask:type('torch.CudaByteTensor')
+         zeroMask = zeroMask:cudaByte()
       end
 
       seqlstm:forward(input)
@@ -3164,14 +2875,6 @@ function rnntest.SeqLSTM_maskzero()
       end
       if cunn then cutorch.synchronize() end
       local nonmasktime = a:time().real
-
-      for t=1,T do
-         for n=1,N do
-            if math.random() <= 1/20 then
-               input[{t,n,{}}] = 0
-            end
-         end
-      end
 
       seqlstm:maskZero()
       seqlstm:setZeroMask(zeroMask)
@@ -3923,14 +3626,15 @@ function rnntest.SeqGRU_maskzero()
       local seqGRU = nn.SeqGRU(D,H)
       local input = torch.randn(T, N, D)
       local gradOutput = torch.randn(T, N, H)
+      local zeroMask = torch.ByteTensor(T, N):random(0,1)
 
       if cunn then
          input = input:cuda()
          gradOutput = gradOutput:cuda()
          seqGRU:cuda()
+         zeroMask = zeroMask:cudaByte()
       end
 
-      seqGRU.maskzero = false
       seqGRU:forward(input)
       seqGRU:backward(input, gradOutput)
 
@@ -3943,15 +3647,8 @@ function rnntest.SeqGRU_maskzero()
       if cunn then cutorch.synchronize() end
       local nonmasktime = a:time().real
 
-      for t=1,T do
-         for n=1,N do
-            if math.random() <= 1/20 then
-               input[{t,n,{}}] = 0
-            end
-         end
-      end
-
-      seqGRU.maskzero = true
+      seqGRU:maskZero()
+      seqGRU:setZeroMask(zeroMask)
       seqGRU:forward(input)
       seqGRU:backward(input, gradOutput)
 
@@ -7239,7 +6936,8 @@ function rnntest.NCE_multicuda()
    mytester:assertTensorEq(nce2.gradWeight[{{},{1+(hiddensize/2), hiddensize}}]:float(), nce.gradWeight.tensors[2]:float(), 0.000001)
 end
 
-function rnn.test(tests, exclude)
+function rnn.test(tests, exclude, benchmark_)
+   benchmark = benchmark_
    mytester = torch.Tester()
    mytester:add(rnntest)
    math.randomseed(os.time())

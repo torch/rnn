@@ -22,7 +22,10 @@ static int nn_(StepGRU_updateOutput)(lua_State *L) {
   buffer->size[0] = batchsize;
 
   THTensor_(resize2d)(next_h, batchsize, outputsize);
+  long nElement = THTensor_(nElement)(gates);
   THTensor_(resize2d)(gates, batchsize, 3 * outputsize);
+  if (nElement != batchsize * 3 * outputsize)
+    THTensor_(fill)(gates, 0);
 
   THTensor *Wx = THTensor_(newNarrow)(weight, 0, 0, inputsize);
   THTensor *Wh = THTensor_(newNarrow)(weight, 0, inputsize, outputsize);
@@ -31,8 +34,6 @@ static int nn_(StepGRU_updateOutput)(lua_State *L) {
   THTensor *reset_gate = THTensor_(newNarrow)(gates, 1, 0, outputsize); // r = sig(Wx * x + Wh * prev_h + b)
   THTensor *update_gate = THTensor_(newNarrow)(gates, 1, outputsize, outputsize); // u = sig(Wx * x + Wh * prev_h + b)
   THTensor *hidden_candidate = THTensor_(newNarrow)(gates, 1, 2*outputsize, outputsize); // hc = tanh(Wx * x + Wh * r . prev_h + b)
-
-  //THTensor_(fill)(gates, 0);
 
   // forward
   THTensor_(addmm)(gates, 1, buffer, 1, cur_x, Wx);
@@ -84,7 +85,6 @@ static int nn_(StepGRU_backward)(lua_State *L) {
   THTensor_(resize2d)(grad_cur_x, batchsize, inputsize);
   THTensor_(resize2d)(grad_prev_h, batchsize, outputsize);
   THTensor_(resize2d)(grad_gates, batchsize, 3 * outputsize);
-  THTensor_(fill)(grad_gates, 0);
 
   THTensor *Wx = THTensor_(newNarrow)(weight, 0, 0, inputsize);
   THTensor *Wh = THTensor_(newNarrow)(weight, 0, inputsize, outputsize);

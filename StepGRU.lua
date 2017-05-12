@@ -37,7 +37,7 @@ end
 function StepGRU:updateOutput(input)
    self.recompute_backward = true
    local cur_x, prev_h, next_h = input[1], input[2], self.output
-   if cur_x.nn.StepGRU_updateOutput and not self.forceLua then
+   if cur_x.nn and cur_x.nn.StepGRU_updateOutput and not self.forceLua then
       cur_x.nn.StepGRU_updateOutput(self.weight, self.bias, self.gates,
                                     cur_x, prev_h,
                                     self.inputsize, self.outputsize,
@@ -52,8 +52,12 @@ function StepGRU:updateOutput(input)
       local Wh = self.weight:narrow(1, inputsize + 1, self.outputsize)
 
       next_h:resize(batchsize, outputsize)
-      self.gates:resize(batchsize, 3 * outputsize):zero()
       local gates = self.gates
+      local nElement = gates:nElement()
+      gates:resize(batchsize, 3 * outputsize)
+      if gates:nElement() ~= batchsize * 3 * outputsize then
+         gates:zero()
+      end
 
       gates:addmm(bias_expand, cur_x, Wx)
       local sub_gates = gates:narrow(2, 1, 2 * outputsize)
@@ -92,7 +96,6 @@ function StepGRU:backward(input, gradOutput, scale)
    scale = scale or 1.0
    assert(scale == 1.0, 'must have scale=1')
 
-   --
    local grad_gates = torch.getBuffer('StepGRU', 'grad_gates', self.gates) -- batchsize x 3*outputsize
    local buffer = torch.getBuffer('StepGRU', 'buffer', self.gates) -- 1 x 3*outputsize
 
@@ -101,7 +104,7 @@ function StepGRU:backward(input, gradOutput, scale)
       nn.utils.recursiveZeroMask(grad_next_h, self.zeroMask)
    end
 
-   if cur_x.nn.StepGRU_backward and not self.forceLua then
+   if cur_x.nn and cur_x.nn.StepGRU_backward and not self.forceLua then
       cur_x.nn.StepGRU_backward(self.weight, self.gates,
                                 self.gradWeight, self.gradBias, grad_gates, buffer,
                                 cur_x, prev_h, grad_next_h,
@@ -125,7 +128,8 @@ function StepGRU:backward(input, gradOutput, scale)
       local update_gate = gates:narrow(2, outputsize + 1, outputsize)
       local hidden_candidate = gates:narrow(2, 2 * outputsize + 1, outputsize)
 
-      grad_gates:resize(batchsize, 3 * outputsize):zero()
+      grad_gates:resize(batchsize, 3 * outputsize)
+
       local grad_reset_gate = grad_gates:narrow(2, 1, outputsize)
       local grad_update_gate = grad_gates:narrow(2, outputsize + 1, outputsize)
       local grad_hidden_candidate = grad_gates:narrow(2, 2 * outputsize + 1, outputsize)

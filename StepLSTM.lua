@@ -51,7 +51,7 @@ function StepLSTM:updateOutput(input)
    self.recompute_backward = true
    local cur_x, prev_h, prev_c = input[1], input[2], input[3]
    local next_h, next_c = self.output[1], self.output[2]
-   if cur_x.nn.StepLSTM_updateOutput and not self.forceLua then
+   if cur_x.nn and cur_x.nn.StepLSTM_updateOutput and not self.forceLua then
       if self.weightO then -- LSTMP
          self.hidden = self.hidden or cur_x.new()
          cur_x.nn.StepLSTM_updateOutput(self.weight, self.bias, self.gates,
@@ -82,8 +82,12 @@ function StepLSTM:updateOutput(input)
       next_h:resize(batchsize, hiddensize)
       next_c:resize(batchsize, hiddensize)
 
-      self.gates:resize(batchsize, 4 * hiddensize):zero()
       local gates = self.gates
+      local nElement = gates:nElement()
+      gates:resize(batchsize, 4 * hiddensize)
+      if gates:nElement() ~= batchsize * 4 * hiddensize then
+         gates:zero()
+      end
 
       -- forward
       gates:addmm(bias_expand, cur_x, Wx)
@@ -134,7 +138,7 @@ function StepLSTM:backward(input, gradOutput, scale)
       nn.utils.recursiveZeroMask({grad_next_h, grad_next_c}, self.zeroMask)
    end
 
-   if cur_x.nn.StepLSTM_backward and not self.forceLua then
+   if cur_x.nn and cur_x.nn.StepLSTM_backward and not self.forceLua then
       if self.weightO then -- LSTMP
          local grad_hidden = torch.getBuffer('StepLSTM', 'grad_hidden', self.hidden)
          cur_x.nn.StepLSTM_backward(self.weight, self.gates,
@@ -182,7 +186,8 @@ function StepLSTM:backward(input, gradOutput, scale)
       local output_gate = gates[{{}, {2 * hiddensize + 1, 3 * hiddensize}}]
       local input_transform = gates[{{}, {3 * hiddensize + 1, 4 * hiddensize}}]
 
-      grad_gates:resize(batchsize, 4 * hiddensize):zero()
+      grad_gates:resize(batchsize, 4 * hiddensize)
+
       local grad_input_gate = grad_gates[{{}, {1, hiddensize}}]
       local grad_forget_gate = grad_gates[{{}, {hiddensize + 1, 2 * hiddensize}}]
       local grad_output_gate = grad_gates[{{}, {2 * hiddensize + 1, 3 * hiddensize}}]

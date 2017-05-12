@@ -32,8 +32,8 @@ function MaskZeroCriterion:updateOutput(input, target)
       self._oneMask = self._oneMask or self.zeroMask.new()
       self._oneMask:lt(self.zeroMask, 1)
       -- 1,0,1 -> 1,3
-      self._indices = self._indices or torch.LongTensor()
-      self._range = self._range or torch.LongTensor()
+      self._indices = self._indices or torch.isCudaTensor(input) and torch.CudaLongTensor() or torch.LongTensor()
+      self._range = self._range or self._indices.new()
       self._range:range(1,self._oneMask:nElement())
       self._indices:maskedSelect(self._range, self._oneMask)
       -- indexSelect the input

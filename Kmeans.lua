@@ -25,7 +25,7 @@ end
 
 -- Reset
 function Kmeans:reset(stdev)
-   local stdev = stdev or 1
+   stdev = stdev or 1
    self.weight:uniform(-stdev, stdev)
 end
 
@@ -55,7 +55,7 @@ function Kmeans:initKmeansPlus(input, p)
    local inputDim = input:nDimension()
    assert(inputDim == 2, "Incorrect input dimensionality. Expecting 2D.")
    local noOfSamples = input:size(1)
-   
+
    local pcount = math.ceil((1-self.p)*noOfSamples)
    if pcount <= 0 then pcount = 1 end
 
@@ -71,13 +71,13 @@ function Kmeans:initKmeansPlus(input, p)
    distances:resize(noOfSamples):fill(math.huge)
    local maxScores = self.weight.new()
    local maxIndx = self.weight.new()
-   
+
    for k=initializedK, self.k do
       clusters = self.weight[{{initializedK-1, initializedK-1}}]
       for i=1, noOfSamples do
          temp:expand(input[{{i}}], 1, self.dim)
          expandedSample:resize(temp:size()):copy(temp)
-      
+
          -- Squared Euclidean distance
          expandedSample:add(-1, clusters)
          clusterDistances:norm(expandedSample, 2, 2)
@@ -135,20 +135,20 @@ function Kmeans:updateOutput(input)
    self._clusterDistances:resize(self.k, batchSize)
 
    self._minScore = self._minScore or self.weight.new()
-   self._minIndx = self._minIndx or torch.LongTensor()
+   self._minIndx = self._minIndx or (torch.isCudaTensor(input) and torch.CudaLongTensor() or torch.LongTensor())
    self._minScore:min(self._minIndx, self._clusterDistances, 1)
    self._minIndx:resize(batchSize)
-   
+
    self.output:resize(batchSize):copy(self._minIndx)
    self.loss = self._minScore:sum()
-  
-   return self.output 
+
+   return self.output
 end
 
 -- Kmeans has its own criterion hence gradInput are zeros
 function Kmeans:updateGradInput(input, gradOuput)
    self.gradInput:resize(input:size()):zero()
-   
+
    return self.gradInput
 end
 
@@ -165,41 +165,43 @@ function Kmeans:accGradParameters(input, gradOutput, scale)
    self._cscAdder:resize(batchSize):fill(1)
    self.clusterSampleCount:zero()
    self.clusterSampleCount:indexAdd(1, self._minIndx, self._cscAdder)
-   
+
    -- scale * (x[k]-c[k]) where k is nearest cluster to x
    self._gradWeight = self._gradWeight or self.gradWeight.new()
    self._gradWeight:index(self.weight, 1, self._minIndx)
-   self._gradWeight:mul(-1) 
+   self._gradWeight:mul(-1)
    self._gradWeight:add(input)
    self._gradWeight:mul(-scale)
-   
+
    self._gradWeight2 = self._gradWeight2 or self.gradWeight.new()
    self._gradWeight2:resizeAs(self.gradWeight):zero()
    self._gradWeight2:indexAdd(1, self._minIndx, self._gradWeight)
-   
+
    -- scale/n * sum_i (x-c)
    self._ccounts = self._ccounts or self.clusterSampleCount.new()
    self._ccounts:resize(self.k):copy(self.clusterSampleCount)
    self._ccounts:add(0.0000001) -- prevent division by zero errors
-   
+
    self._gradWeight2:cdiv(self._ccounts:view(self.k,1):expandAs(self.gradWeight))
-   
+
    self.gradWeight:add(self._gradWeight2)
 end
 
+function Kmeans:clearState()
+   -- prevent premature memory allocations
+   self._expandedSamples = nil
+   self._clusterDistances = nil
+   self._temp = nil
+   self._tempExpanded = nil
+   self._tempWeight = nil
+   self._tempWeightExp = nil
+   self._expandedWeight = nil
+   self._minScore = nil
+   self._minIndx = nil
+   self._cscAdder = nil
+end
+
 function Kmeans:type(type, tensorCache)
-   if type then
-      -- prevent premature memory allocations
-      self._expandedSamples = nil
-      self._clusterDistances = nil
-      self._temp = nil
-      self._tempExpanded = nil
-      self._tempWeight = nil
-      self._tempWeightExp = nil
-      self._expandedWeight = nil
-      self._minScore = nil
-      self._minIndx = nil
-      self._cscAdder = nil
-   end
+   self:clearState()
    return parent.type(self, type, tensorCache)
 end
