@@ -58,7 +58,7 @@ require('rnn.Collapse')
 require('rnn.ZipTable')
 require('rnn.ZipTableOneToMany')
 require('rnn.CAddTensorTable')
-require('rnn.ReverseTable')
+require('rnn.ReverseSequence')
 require('rnn.Dictionary')
 require('rnn.Inception')
 require('rnn.Clip')
@@ -131,7 +131,6 @@ require('rnn.RecurrentAttention')
 -- sequencer + recurrent modules
 require('rnn.SeqLSTM')
 require('rnn.SeqGRU')
-require('rnn.SeqReverseSequence')
 require('rnn.SeqBRNN')
 
 -- recurrent criterions:
@@ -144,6 +143,7 @@ require('rnn.MaskZeroCriterion')
 require('rnn.LSTM')
 require('rnn.FastLSTM')
 require('rnn.SeqLSTMP')
+require('rnn.SeqReverseSequence')
 
 -- prevent likely name conflicts
 nn.rnn = rnn

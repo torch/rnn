@@ -42,7 +42,7 @@ SET(luasrc
   SeqGRU.lua
   SeqLSTM.lua
   deprecated/SeqLSTMP.lua
-  SeqReverseSequence.lua
+  deprecated/SeqReverseSequence.lua
   Sequencer.lua
   SequencerCriterion.lua
   ZeroGrad.lua
@@ -85,7 +85,7 @@ SET(luasrc
   ReinforceCategorical.lua
   ReinforceGamma.lua
   ReinforceNormal.lua
-  ReverseTable.lua
+  ReverseSequence.lua
   Sequential.lua
   Serial.lua
   SimpleColorTransform.lua

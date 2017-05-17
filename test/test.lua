@@ -4991,24 +4991,45 @@ function rnntest.CAddTensorTable()
    mytester:assertTensorEq(output[1]+output[2]+output[3], gradInput[1], 0.000001, "CAddTensorTable gradInput1")
 end
 
-function rnntest.ReverseTable()
+function rnntest.ReverseSequence()
+   -- test table
+
    -- input : { a, b, c, d }
    -- output : { c, b, a, d }
-   local r = nn.ReverseTable()
+   local r = nn.ReverseSequence()
    local input = {torch.randn(3,4), torch.randn(3,4), torch.randn(3,4), torch.randn(3,4)}
    local output = r:forward(input)
 
-   mytester:assert(#output == 4, "ReverseTable #output")
+   mytester:assert(#output == 4, "ReverseSequence #output")
    local k = 1
    for i=#input,1,-1 do
-      mytester:assertTensorEq(input[i], output[k], 0.00001, "ReverseTable output err "..k)
+      mytester:assertTensorEq(input[i], output[k], 0.00001, "ReverseSequence output err "..k)
       k = k + 1
    end
 
    local gradInput = r:backward(input, output)
-   mytester:assert(#gradInput == 4, "ReverseTable #gradInput")
+   mytester:assert(#gradInput == 4, "ReverseSequence #gradInput")
    for i=1,#input do
-      mytester:assertTensorEq(gradInput[i], input[i], 0.00001, "ReverseTable gradInput err "..i)
+      mytester:assertTensorEq(gradInput[i], input[i], 0.00001, "ReverseSequence gradInput err "..i)
+   end
+
+   -- test tensor
+
+   local r = nn.ReverseSequence()
+   local input = torch.randn(5,4,3)
+   local output = r:forward(input)
+
+   mytester:assert(output:isSameSizeAs(input), "ReverseSequence #output")
+   local k = 1
+   for i=5,1,-1 do
+      mytester:assertTensorEq(input[i], output[k], 0.00001, "ReverseSequence output err "..k)
+      k = k + 1
+   end
+
+   local gradInput = r:backward(input, output)
+   mytester:assert(gradInput:isSameSizeAs(input), "ReverseSequence #gradInput")
+   for i=1,5 do
+      mytester:assertTensorEq(gradInput[i], input[i], 0.00001, "ReverseSequence gradInput err "..i)
    end
 end
 
