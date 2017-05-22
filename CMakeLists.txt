@@ -4,11 +4,15 @@ CMAKE_MINIMUM_REQUIRED(VERSION 2.6 FATAL_ERROR)
 CMAKE_POLICY(VERSION 2.6)
 
 FIND_PACKAGE(Torch REQUIRED)
+SET(BUILD_STATIC YES) # makes sure static targets are enabled in ADD_TORCH_PACKAGE
+SET(CMAKE_C_FLAGS
+  "--std=c99 -pedantic -Werror -Wall -Wextra -Wno-unused-function -D_GNU_SOURCE ${CMAKE_C_FLAGS}")
 
-SET(CMAKE_C_FLAGS "--std=c99 -pedantic -Werror -Wall -Wextra -Wno-unused-function -D_GNU_SOURCE ${CMAKE_C_FLAGS}")
 SET(src
-   init.c
-)
+   src/rnn.c
+   )
+
+INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/src)
 SET(luasrc
   init.lua
   AbstractRecurrent.lua
