@@ -1,6 +1,7 @@
 require 'torchx'
 local _ = require 'moses'
 require 'nn'
+pcall(require, 'cunn')
 
 -- create global rnn table:
 rnn = {}
