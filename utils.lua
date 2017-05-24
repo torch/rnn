@@ -76,11 +76,7 @@ function nn.utils.getZeroMaskSequence(sequence, zeroMask)
    end
    _zeroMask:norm(sequence, 2, 3)
 
-   zeroMask = zeroMask or (
-       (torch.type(sequence) == 'torch.CudaTensor') and torch.CudaByteTensor()
-       or (torch.type(sequence) == 'torch.ClTensor') and torch.ClTensor()
-       or torch.ByteTensor()
-    )
+   zeroMask = zeroMask or torch.isCudaTensor(sequence) and torch.CudaByteTensor() or torch.ByteTensor()
    _zeroMask.eq(zeroMask, _zeroMask, 0)
    return zeroMask:view(sequence:size(1), sequence:size(2))
 end

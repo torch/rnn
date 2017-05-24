@@ -266,6 +266,7 @@ SeqGRU.training = nn.SeqLSTM.training
 SeqGRU.evaluate = nn.SeqLSTM.evaluate
 SeqGRU.maskZero = nn.StepGRU.maskZero
 SeqGRU.setZeroMask = nn.MaskZero.setZeroMask
+SeqGRU.__tostring__ = nn.StepGRU.__tostring__
 
 function SeqGRU:setStartState(hiddenState)
    self.h0:resizeAs(hiddenState):copy(hiddenState)

@@ -3,9 +3,9 @@
 -- Encapsulates forward, backward and merge modules.
 -- Input is a sequence (a table) of tensors.
 -- Output is a sequence (a table) of tensors of the same length.
--- Applies a `fwd` rnn instance to the first `N-1` elements in the
+-- RNN instance :`fwd`, is applied to first `N-i` elements in the
 -- sequence in forward order.
--- Applies the `bwd` rnn in reverse order to the last `N-1` elements
+-- Applies the `bwd` RNN in reverse order to the last `N-i` elements
 -- (from second-to-last element to first element).
 -- Note : you shouldn't stack these for language modeling.
 -- Instead, stack each fwd/bwd seqs and encapsulate these.
@@ -54,10 +54,7 @@ function BiSequencerLM:__init(forward, backward, merge)
 
    self._fwd = self.fwdSeq
 
-   self._bwd = nn.Sequential()
-   self._bwd:add(nn.ReverseTable())
-   self._bwd:add(self.bwdSeq)
-   self._bwd:add(nn.ReverseTable())
+   self._bwd = nn.ReverseUnreverse(self.bwdSeq)
 
    self._merge = nn.Sequential()
    self._merge:add(nn.ZipTable())
@@ -152,4 +149,8 @@ function BiSequencerLM:__tostring__()
    str = str .. line .. tab .. '( merge ): ' .. tostring(self._merge):gsub(line, line .. tab .. ext)
    str = str .. line .. '}'
    return str
+end
+
+function BiSequencerLM:setZeroMask()
+   error"Not Implemented"
 end

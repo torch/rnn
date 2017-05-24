@@ -14,6 +14,7 @@ cmd:option('--num_batches', 64, 'Number of samples')
 cmd:option('--num_iter', 5, 'Number of iterations')
 cmd:option('--force_lua', false, 'force use of Lua instead of C with LSTM')
 cmd:option('--tensor_type', 'torch.FloatTensor', 'tensor type (to compare with TF test use torch.FloatTensor)')
+cmd:option('--rec_lstm', false, 'use RecLSTM instead of SeqLSTM')
 cmd:text()
 
 local args = cmd:parse(arg)
@@ -24,11 +25,15 @@ local seqlen = args.seq_length
 local batchsize = args.batch_size
 local niter = args.num_iter
 local nSamples = nbatch * batchsize
+local force_lua = args.force_lua
 local tensor_type = args.tensor_type
+local rec_lstm = args.rec_lstm
+
+torch.setdefaulttensortype(tensor_type)
 
 local forward_only = args.mode:lower() == 'inference'
-local inputs = torch.rand(nbatch, seqlen, batchsize, hiddensize):type(tensor_type)
-local targets = torch.rand(nbatch, batchsize, hiddensize):type(tensor_type)
+local inputs = torch.rand(nbatch, seqlen, batchsize, hiddensize)
+local targets = torch.rand(nbatch, batchsize, hiddensize)
 
 function BasicRNN(num_units)
    local rnn = nn.Sequential()
@@ -44,8 +49,14 @@ end
 
 local lstm
 function BasicLSTM(num_units)
-   lstm = nn.SeqLSTM(num_units, num_units)
-   lstm.forceLua = args.force_lua
+   if rec_lstm then
+      local reclstm = nn.RecLSTM(num_units, num_units)
+      reclstm.modules[1].forceLua = force_lua
+      lstm = nn.Sequencer(reclstm)
+   else
+      lstm = nn.SeqLSTM(num_units, num_units)
+      lstm.forceLua = force_lua
+   end
    rnn = nn.Sequential()
       :add(lstm)
       :add(nn.Select(1,-1))
@@ -62,9 +73,6 @@ else
 end
 
 local criterion = nn.MSECriterion()
-
-rnn:type(tensor_type)
-criterion:type(tensor_type)
 
 local a = torch.Timer()
 
@@ -86,12 +94,14 @@ end
 local func = forward_only and infer or train
 
 -- Warmup
-func(1)
+for i = 1, nbatch do
+   func(i)
+end
 local elapsed = 0
 for j = 1, niter do
+   collectgarbage()
    a:reset()
    for i = 1, nbatch do
-      if lstm then lstm.print_profile = (j == 1 and i == 1) end
       func(i)
    end
    local a_time = a:time().real

@@ -406,6 +406,7 @@ end
 
 SeqLSTM.maskZero = nn.StepLSTM.maskZero
 SeqLSTM.setZeroMask = nn.MaskZero.setZeroMask
+SeqLSTM.__tostring__ = nn.StepLSTM.__tostring__
 
 function SeqLSTM:parameters()
    return {self.weight, self.bias, self.weightO}, {self.gradWeight, self.gradBias, self.gradWeightO}
