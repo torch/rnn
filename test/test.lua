@@ -623,7 +623,7 @@ function rnntest.Sequencer_main()
 
    -- test with LSTM
    local outputSize = inputSize
-   local lstm = nn.LSTM(inputSize, outputSize, nil, false)
+   local lstm = nn.RecLSTM(inputSize, outputSize, nil, false)
    lstm:zeroGradParameters()
    local lstm2 = lstm:clone()
 
@@ -655,10 +655,10 @@ function rnntest.Sequencer_main()
    mytester:assertTensorEq(gradOutputs[2], gradOutput1, 0.00001, "Sequencer lstm gradOutput modified error")
 
    -- test remember modes : 'both', 'eval' for training(), evaluate(), training()
-   local lstm = nn.LSTM(5,5)
+   local lstm = nn.RecLSTM(5,5)
    local seq = nn.Sequencer(lstm)
-   local inputTrain = {torch.randn(5), torch.randn(5), torch.randn(5)}
-   local inputEval = {torch.randn(5)}
+   local inputTrain = {torch.randn(1, 5), torch.randn(1, 5), torch.randn(1, 5)}
+   local inputEval = {torch.randn(1, 5)}
 
    -- this shouldn't fail
    local modes = {'both', 'eval'}
@@ -1224,48 +1224,38 @@ function rnntest.Sequencer_tensoreval()
    end
 end
 
-function rnntest.BiSequencer()
-   local hiddenSize = 8
-   local batchSize = 4
-   local nStep = 3
-   local fwd = nn.LSTM(hiddenSize, hiddenSize)
-   local bwd = nn.LSTM(hiddenSize, hiddenSize)
+function rnntest.BiSequencer_main()
+   local hiddensize = 8
+   local batchsize = 4
+   local seqlen = 3
+   local fwd = nn.RecLSTM(hiddensize, hiddensize)
+   local bwd = nn.RecLSTM(hiddensize, hiddensize)
    fwd:zeroGradParameters()
    bwd:zeroGradParameters()
    local brnn = nn.BiSequencer(fwd:clone(), bwd:clone())
-   local inputs, gradOutputs = {}, {}
-   for i=1,nStep do
-      inputs[i] = torch.randn(batchSize, hiddenSize)
-      gradOutputs[i] = torch.randn(batchSize, hiddenSize*2)
-   end
-   local outputs = brnn:forward(inputs)
-   local gradInputs = brnn:backward(inputs, gradOutputs)
-   mytester:assert(#inputs == #outputs, "BiSequencer #outputs error")
-   mytester:assert(#inputs == #gradInputs, "BiSequencer #outputs error")
+   local input = torch.randn(seqlen, batchsize, hiddensize)
+   local gradOutput = torch.randn(seqlen, batchsize, hiddensize)
+   local output = brnn:forward(input)
+   local gradInput = brnn:backward(input, gradOutput)
+   mytester:assert(input:isSameSizeAs(output), "BiSequencer #outputs error")
+   mytester:assert(input:isSameSizeAs(gradInput), "BiSequencer #gradInput error")
 
    -- forward
    local fwdSeq = nn.Sequencer(fwd)
-   local bwdSeq = nn.Sequencer(bwd)
-   local zip, join = nn.ZipTable(), nn.Sequencer(nn.JoinTable(1,1))
-   local fwdOutputs = fwdSeq:forward(inputs)
-   local bwdOutputs = _.reverse(bwdSeq:forward(_.reverse(inputs)))
-   local zipOutputs = zip:forward{fwdOutputs, bwdOutputs}
-   local outputs2 = join:forward(zipOutputs)
-   for i,output in ipairs(outputs) do
-      mytester:assertTensorEq(output, outputs2[i], 0.000001, "BiSequencer output err "..i)
-   end
+   local bwdSeq = nn.ReverseUnreverse(nn.Sequencer(bwd))
+   local merge = nn.CAddTable()
+   local fwdOutputs = fwdSeq:forward(input)
+   local bwdOutputs = input:clone()
+   local bwdOutputs = bwdSeq:forward(input)
+   local output2 = merge:forward{fwdOutputs, bwdOutputs}
+   mytester:assertTensorEq(output, output2, 0.000001, "BiSequencer output err ")
 
    -- backward
-   local joinGradInputs = join:backward(zipOutputs, gradOutputs)
-   local zipGradInputs = zip:backward({fwdOutputs, bwdOutputs}, joinGradInputs)
-   local bwdGradInputs = _.reverse(bwdSeq:backward(_.reverse(inputs), _.reverse(zipGradInputs[2])))
-   local fwdGradInputs = fwdSeq:backward(inputs, zipGradInputs[1])
-   local gradInputs2 = zip:forward{fwdGradInputs, bwdGradInputs}
-   for i,gradInput in ipairs(gradInputs) do
-      local gradInput2 = gradInputs2[i]
-      gradInput2[1]:add(gradInput2[2])
-      mytester:assertTensorEq(gradInput, gradInput2[1], 0.000001, "BiSequencer gradInput err "..i)
-   end
+   local mergeGradInputs = merge:backward({fwdOutputs, bwdOutputs}, gradOutput)
+   local bwdGradInputs = bwdSeq:backward(input, mergeGradInputs[2])
+   local fwdGradInputs = fwdSeq:backward(input, mergeGradInputs[1])
+   local gradInput2 = merge:clone():forward{fwdGradInputs, bwdGradInputs}
+   mytester:assertTensorEq(gradInput, gradInput2, 0.000001, "BiSequencer gradInput err ")
 
    -- params
    local brnn2 = nn.Sequential():add(fwd):add(bwd)
@@ -1287,6 +1277,27 @@ function rnntest.BiSequencer()
       mytester:assertTensorEq(param, params2[i], 0.000001, "BiSequencer params update err "..i)
       mytester:assertTensorEq(gradParams[i], gradParams2[i], 0.000001, "BiSequencer gradParams zero err "..i)
    end
+end
+
+function rnntest.BiSequencer_maskZero()
+   local hiddensize = 8
+   local batchsize = 4
+   local seqlen = 3
+   local fwd = nn.RecLSTM(hiddensize, hiddensize)
+   local bwd = nn.RecLSTM(hiddensize, hiddensize)
+   fwd:zeroGradParameters()
+   bwd:zeroGradParameters()
+   local brnn = nn.BiSequencer(fwd, bwd):maskZero()
+   local input = torch.randn(seqlen, batchsize, hiddensize)
+   local gradOutput = torch.randn(seqlen, batchsize, hiddensize)
+   local zeroMask = torch.ByteTensor(seqlen, batchsize):random(0,1)
+   brnn:setZeroMask(zeroMask)
+   local output = brnn:forward(input)
+   local zeroMask2 = nn.utils.getZeroMaskSequence(output)
+   mytester:assertTensorEq(zeroMask, zeroMask2, 0.000001)
+   local gradInput = brnn:backward(input, gradOutput)
+   local zeroMask3 = nn.utils.getZeroMaskSequence(gradInput)
+   mytester:assertTensorEq(zeroMask, zeroMask3, 0.000001)
 end
 
 function rnntest.BiSequencerLM()
@@ -3023,14 +3034,13 @@ function rnntest.SeqLSTMP_main()
    end
 end
 
-function rnntest.SeqBRNNTest()
-   local brnn = nn.SeqBRNN(5, 5)
+function rnntest.SeqBLSTMTest()
+   local brnn = nn.SeqBLSTM(5, 5)
 
    local input = torch.rand(5, 1, 5)
-   local output = brnn:forward(input)
-   local concatTable = brnn.modules[1]:get(1)
-   local fwd = concatTable:get(1) -- get SeqLSTM fwd.
-   local bwd = concatTable:get(2):get(2) -- get SeqLSTM bwd.
+   local output = brnn:forward(input):clone()
+   local fwd = brnn:getForward()
+   local bwd = brnn:getBackward()
    fwd:clearState()
    bwd:clearState()
 
@@ -3046,14 +3056,14 @@ function rnntest.SeqBRNNTest()
    mytester:assertTensorEq(expectedOutput, output, 0)
 end
 
-function rnntest.SeqBRNNJoinTest()
-   local brnn = nn.SeqBRNN(5, 5, false , nn.JoinTable(3))
+function rnntest.BiSequencer_JoinTable()
+   local lstm = nn.SeqLSTM(5, 5)
+   local brnn = nn.BiSequencer(lstm, nil, nn.JoinTable(3))
 
    local input = torch.rand(5, 1, 5)
    local output = brnn:forward(input)
-   local concatTable = brnn.modules[1]:get(1)
-   local fwd = concatTable:get(1) -- get SeqLSTM fwd.
-   local bwd = concatTable:get(2):get(2) -- get SeqLSTM bwd.
+   local fwd = brnn:getForward()
+   local bwd = brnn:getBackward()
    fwd:clearState()
    bwd:clearState()
 
@@ -3066,31 +3076,6 @@ function rnntest.SeqBRNNJoinTest()
    local bwdOutput = reverseSequence:forward(bwdOutput)
 
    local expectedOutput = nn.JoinTable(3):forward({fwdOutput, bwdOutput})
-   mytester:assertTensorEq(expectedOutput, output, 0)
-end
-
-function rnntest.BRNNBatchFirstTest()
-   local brnn = nn.SeqBRNN(5, 5, true , nn.JoinTable(3))
-
-   local input = torch.rand(1, 5, 5)
-   local output = brnn:forward(input)
-   local concatTable = brnn.modules[1]:get(2)
-   local fwd = concatTable:get(1) -- get SeqLSTM fwd.
-   local bwd = concatTable:get(2):get(2) -- get SeqLSTM bwd.
-   fwd:clearState()
-   bwd:clearState()
-
-   input = input:transpose(1,2) -- Manually transpose the input.
-   local fwdOutput = fwd:forward(input)
-
-   local reverseSequence = nn.SeqReverseSequence(1)
-
-   local reversedInput = reverseSequence:forward(input)
-   local bwdOutput = bwd:forward(reversedInput)
-   local bwdOutput = reverseSequence:forward(bwdOutput)
-
-   local expectedOutput = nn.JoinTable(3):forward({fwdOutput, bwdOutput})
-   local expectedOutput = expectedOutput:transpose(1,2) -- Undo transpose to input.
    mytester:assertTensorEq(expectedOutput, output, 0)
 end
 

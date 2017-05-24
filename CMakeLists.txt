@@ -17,7 +17,7 @@ SET(luasrc
   AbstractSequencer.lua
   AbstractSequencerCriterion.lua
   BiSequencer.lua
-  BiSequencerLM.lua
+  deprecated/BiSequencerLM.lua
   CopyGrad.lua
   Dropout.lua
   ExpandAs.lua
@@ -38,7 +38,8 @@ SET(luasrc
   Repeater.lua
   RepeaterCriterion.lua
   SAdd.lua
-  SeqBRNN.lua
+  SeqBGRU.lua
+  SeqBLSTM.lua
   SeqGRU.lua
   SeqLSTM.lua
   deprecated/SeqLSTMP.lua
@@ -104,6 +105,7 @@ SET(luasrc
   WhiteNoise.lua
   ZipTable.lua
   ZipTableOneToMany.lua
+  ReverseUnreverse.lua
 )
 
 ADD_TORCH_PACKAGE(rnn "${src}" "${luasrc}" "An RNN library for Torch")

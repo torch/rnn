@@ -4,7 +4,7 @@ require 'nn'
 
 -- create global rnn table:
 rnn = {}
-rnn.version = 2.6 -- zero-masking v2 : setZeroMask(zeroMask)
+rnn.version = 2.7 -- better support for bidirection RNNs
 
 -- lua 5.2 compat
 
@@ -83,6 +83,7 @@ require('rnn.StepGRU')
 require('rnn.SpatialBinaryConvolution')
 require('rnn.SimpleColorTransform')
 require('rnn.PCAColorTransform')
+require('rnn.ReverseUnreverse')
 
 -- Noise Contrastive Estimation
 require('rnn.NCEModule')
@@ -125,13 +126,13 @@ require('rnn.AbstractSequencer')
 require('rnn.Repeater')
 require('rnn.Sequencer')
 require('rnn.BiSequencer')
-require('rnn.BiSequencerLM')
 require('rnn.RecurrentAttention')
 
 -- sequencer + recurrent modules
 require('rnn.SeqLSTM')
 require('rnn.SeqGRU')
-require('rnn.SeqBRNN')
+require('rnn.SeqBLSTM')
+require('rnn.SeqBGRU')
 
 -- recurrent criterions:
 require('rnn.AbstractSequencerCriterion')
@@ -144,6 +145,7 @@ require('rnn.LSTM')
 require('rnn.FastLSTM')
 require('rnn.SeqLSTMP')
 require('rnn.SeqReverseSequence')
+require('rnn.BiSequencerLM')
 
 -- prevent likely name conflicts
 nn.rnn = rnn

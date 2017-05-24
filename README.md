@@ -6,12 +6,12 @@ This library includes documentation for the following objects:
 
 Modules that consider successive calls to `forward` as different time-steps in a sequence :
  * [AbstractRecurrent](#rnn.AbstractRecurrent) : an abstract class inherited by `Recurrence` and `RecLSTM`;
- * [LookupRNN](#rnn.LookupRNN): implements a simple RNN where the input layer is a `LookupTable`;
- * [LinearRNN](#rnn.LinearRNN): implements a simple RNN where the input layer is a `Linear`;
+ * [Recurrence](#rnn.Recurrence) : decorates a module that outputs `output(t)` given `{input(t), output(t-1)}`;
+  * [LookupRNN](#rnn.LookupRNN): implements a simple RNN where the input layer is a `LookupTable`;
+  * [LinearRNN](#rnn.LinearRNN): implements a simple RNN where the input layer is a `Linear`;
  * [RecLSTM](#rnn.RecLSTM) : an LSTM that can be used for real-time RNNs;
  * [RecGRU](#rnn.RecGRU) : an GRU that can be used for real-time RNNs;
  * [Recursor](#rnn.Recursor) : decorates a module to make it conform to the [AbstractRecurrent](#rnn.AbstractRecurrent) interface;
- * [Recurrence](#rnn.Recurrence) : decorates a module that outputs `output(t)` given `{input(t), output(t-1)}`;
  * [NormStabilizer](#rnn.NormStabilizer) : implements [norm-stabilization](http://arxiv.org/abs/1511.08400) criterion (add this module between RNNs);
  * [MuFuRu](#rnn.MuFuRu) : [Multi-function Recurrent Unit](https://arxiv.org/abs/1606.03002) module;
 
@@ -20,9 +20,9 @@ Modules that `forward` entire sequences through a decorated `AbstractRecurrent` 
  * [Sequencer](#rnn.Sequencer) : applies an encapsulated module to all elements in an input sequence  (Tensor or Table);
  * [SeqLSTM](#rnn.SeqLSTM) : a faster version of `nn.Sequencer(nn.RecLSTM)` where the `input` and `output` are tensors;
  * [SeqGRU](#rnn.SeqGRU) : a faster version of `nn.Sequencer(nn.RecGRU)` where the `input` and `output` are tensors;
- * [SeqBRNN](#rnn.SeqBRNN) : Bidirectional RNN based on SeqLSTM;
- * [BiSequencer](#rnn.BiSequencer) : used for implementing Bidirectional RNNs and LSTMs;
- * [BiSequencerLM](#rnn.BiSequencerLM) : used for implementing Bidirectional RNNs and LSTMs for language models;
+ * [BiSequencer](#rnn.BiSequencer) : used for implementing Bidirectional RNNs;
+  * [SeqBLSTM](#rnn.SeqBLSTM) : bidirectional LSTM that uses two `SeqLSTMs` internally;
+  * [SeqBGRU](#rnn.SeqBGRU) : bidirectional GRU that uses two `SeqGRUs` internally;
  * [Repeater](#rnn.Repeater) : repeatedly applies the same input to an `AbstractRecurrent` instance;
  * [RecurrentAttention](#rnn.RecurrentAttention) : a generalized attention model for [REINFORCE modules](https://github.com/nicholas-leonard/dpnn#nn.Reinforce);
 
@@ -34,7 +34,6 @@ Miscellaneous modules and criterions :
  * [MaskZeroCriterion](#rnn.MaskZeroCriterion) : zeros the `gradInput` and `loss` rows of the decorated criterion for commensurate
    * `input` rows which are tensors of zeros (version 1);
    * `zeroMask` elements which are 1 (version 2);
- * [SeqReverseSequence](#rnn.SeqReverseSequence) : reverses an input sequence on a specific dimension;
  * [VariableLength](#rnn.VariableLength): decorates a `Sequencer` to accept and produce a table of variable length inputs and outputs;
 
 Criterions used for handling sequential inputs and targets :
@@ -57,7 +56,8 @@ The package provides the following Modules:
  * [ZipTable](#nn.ZipTable) : zip a table of tables into a table of tables;
  * [ZipTableOneToMany](#nn.ZipTableOneToMany) : zip a table of element `el` and table of elements into a table of pairs of element `el` and table elements;
  * [CAddTensorTable](#nn.CAddTensorTable) : adds a tensor to a table of tensors of the same size;
- * [ReverseTable](#nn.ReverseTable) : reverse the order of elements in a table;
+ * [ReverseSequence](#nn.ReverseSequence) : reverse the order of elements in a sequence (table or tensor);
+ * [ReverseUnreverse](#nn.ReverseUnreverse) : used internally by `nn.BiSequencer` for decorating `bwd` RNN.
  * [PrintSize](#nn.PrintSize) : prints the size of inputs and gradOutputs (useful for debugging);
  * [Clip](#nn.Clip) : clips the inputs to a min and max value;
  * [Constant](#nn.Constant) : outputs a constant value given an input (which is ignored);
@@ -1060,38 +1060,23 @@ seqGRU = nn.SeqGRU(inputsize, outputsize)
 
 Usage of SeqGRU differs from GRU in the same manner as SeqLSTM differs from LSTM. Therefore see [SeqLSTM](#rnn.SeqLSTM) for more details.
 
-<a name='rnn.SeqBRNN'></a>
-## SeqBRNN ##
-
-```lua
-brnn = nn.SeqBRNN(inputSize, outputSize, [batchFirst], [merge])
-```
-
-A bi-directional RNN that uses SeqLSTM. Internally contains a 'fwd' and 'bwd' module of SeqLSTM. Expects an input shape of ```seqlen x batchsize x inputsize```.
-By setting [batchFirst] to true, the input shape can be ```batchsize x seqLen x inputsize```. Merge module defaults to CAddTable(), summing the outputs from each
-output layer.
-
-Example:
-```
-input = torch.rand(1, 1, 5)
-brnn = nn.SeqBRNN(5, 5)
-print(brnn:forward(input))
-```
-Prints an output of a 1x1x5 tensor.
-
 <a name='rnn.BiSequencer'></a>
 ## BiSequencer ##
 Applies encapsulated `fwd` and `bwd` rnns to an input sequence in forward and reverse order.
-It is used for implementing Bidirectional RNNs and LSTMs.
+It is used for implementing bidirectional RNNs like [SeqBLSTM](#rnn.SeqBLSTM) and [SeqBGRU](#rnn.SeqBGRU).
 
 ```lua
 brnn = nn.BiSequencer(fwd, [bwd, merge])
 ```
 
-The input to the module is a sequence (a table) of tensors
-and the output is a sequence (a table) of tensors of the same length.
-Applies a `fwd` rnn (an [AbstractRecurrent](#rnn.AbstractRecurrent) instance) to each element in the sequence in
-forward order and applies the `bwd` rnn in reverse order (from last element to first element).
+The `input` to the module is a sequence tensor of size `seqlen x batchsize [x ...]`.
+The `output` is a sequence of size `seqlen x batchsize [x ...]`.
+`BiSequencer` applies a `fwd` RNN to each element in the sequence in
+forward order and applies the `bwd` RNN in reverse order (from last element to first element).
+
+The `fwd` and optional `bwd` RNN can be [AbstractRecurrent](#rnn.AbstractRecurrent) or [AbstractSequencer](#rnn.AbstractSequencer)
+instances.
+
 The `bwd` rnn defaults to:
 
 ```lua
@@ -1099,77 +1084,54 @@ bwd = fwd:clone()
 bwd:reset()
 ```
 
-For each step (in the original sequence), the outputs of both rnns are merged together using
-the `merge` module (defaults to `nn.JoinTable(1,1)`).
-If `merge` is a number, it specifies the [JoinTable](https://github.com/torch/nn/blob/master/doc/table.md#nn.JoinTable)
-constructor's `nInputDim` argument. Such that the `merge` module is then initialized as :
-
-```lua
-merge = nn.JoinTable(1,merge)
-```
+For each step (in the original sequence), the outputs of both RNNs are merged together using
+the `merge` module (defaults to `nn.CAddTable`).
+This way, the outputs of both RNNs (in forward order) are summed.
 
 Internally, the `BiSequencer` is implemented by decorating a structure of modules that makes
-use of 3 Sequencers for the forward, backward and merge modules.
+use of `Sequencers` for the `fwd` and `bwd` modules.
 
 Similarly to a [Sequencer](#rnn.Sequencer), the sequences in a batch must have the same size.
 But the sequence length of each batch can vary.
 
-Note : make sure you call `brnn:forget()` after each call to `updateParameters()`.
-Alternatively, one could call `brnn.bwdSeq:forget()` so that only `bwd` rnn forgets.
-This is the minimum requirement, as it would not make sense for the `bwd` rnn to remember future sequences.
+Note that when calling `BiSequencer:remember()`, only the `fwd` module can [remember()](#rnn.AbstractSequencer.remember).
+The `bwd` module never remembers because it views the `input` in reverse order.
+
+Also note that [`BiSequencer:setZeroMask(zeroMask)`](#rnn.MaskZero.setZeroMask)
+corrently reverses the order of the `zeroMask` for the `bwd` RNN.
 
 
-<a name='rnn.BiSequencerLM'></a>
-## BiSequencerLM ##
-
-Applies encapsulated `fwd` and `bwd` rnns to an input sequence in forward and reverse order.
-It is used for implementing Bidirectional RNNs and LSTMs for Language Models (LM).
-
-```lua
-brnn = nn.BiSequencerLM(fwd, [bwd, merge])
-```
-
-The input to the module is a sequence (a table) of tensors
-and the output is a sequence (a table) of tensors of the same length.
-Applies a `fwd` rnn (an [AbstractRecurrent](#rnn.AbstractRecurrent) instance to the
-first `N-1` elements in the sequence in forward order.
-Applies the `bwd` rnn in reverse order to the last `N-1` elements (from second-to-last element to first element).
-This is the main difference of this module with the [BiSequencer](#rnn.BiSequencer).
-The latter cannot be used for language modeling because the `bwd` rnn would be trained to predict the input it had just be fed as input.
-
-![BiDirectionalLM](doc/image/bidirectionallm.png)
-
-The `bwd` rnn defaults to:
+<a name='rnn.SeqBLSTM'></a>
+## SeqBLSTM ##
 
 ```lua
-bwd = fwd:clone()
-bwd:reset()
+blstm = nn.SeqBLSTM(inputsize, hiddensize, [outputsize])
 ```
 
-While the `fwd` rnn will output representations for the last `N-1` steps,
-the `bwd` rnn will output representations for the first `N-1` steps.
-The missing outputs for each rnn ( the first step for the `fwd`, the last step for the `bwd`)
-will be filled with zero Tensors of the same size the commensure rnn's outputs.
-This way they can be merged. If `nn.JoinTable` is used (the default), then the first
-and last output elements will be padded with zeros for the missing `fwd` and `bwd` rnn outputs, respectively.
+A bi-directional RNN that uses `SeqLSTM`. Internally contains a `fwd` and `bwd` `SeqLSTM`.
+Expects an input shape of `seqlen x batchsize x inputsize`.
+For merging the outputs of the `fwd` and `bwd` LSTMs, this BLSTM uses `nn.CAddTable()`;
+summing the outputs from eachoutput layer.
 
-For each step (in the original sequence), the outputs of both rnns are merged together using
-the `merge` module (defaults to `nn.JoinTable(1,1)`).
-If `merge` is a number, it specifies the [JoinTable](https://github.com/torch/nn/blob/master/doc/table.md#nn.JoinTable)
-constructor's `nInputDim` argument. Such that the `merge` module is then initialized as :
+Example:
+```
+input = torch.rand(1, 2, 5)
+blstm = nn.SeqBLSTM(5, 3)
+print(blstm:forward(input))
+```
+Prints an output of a `1 x 2 x 3` tensor.
+
+<a name='rnn.SeqBGRU'></a>
+## SeqBGRU ##
 
 ```lua
-merge = nn.JoinTable(1,merge)
+blstm = nn.SeqBGRU(inputsize, outputsize)
 ```
 
-Similarly to a [Sequencer](#rnn.Sequencer), the sequences in a batch must have the same size.
-But the sequence length of each batch can vary.
-
-Note that LMs implemented with this module will not be classical LMs as they won't measure the
-probability of a word given the previous words. Instead, they measure the probabiliy of a word
-given the surrounding words, i.e. context. While for mathematical reasons you may not be able to use this to measure the
-probability of a sequence of words (like a sentence),
-you can still measure the pseudo-likeliness of such a sequence (see [this](http://arxiv.org/pdf/1504.01575.pdf) for a discussion).
+A bi-directional RNN that uses `SeqGRU`. Internally contains a `fwd` and `bwd` `SeqGRU`.
+Expects an input shape of `seqlen x batchsize x inputsize`.
+For merging the outputs of the `fwd` and `bwd` LSTMs, this BLSTM uses `nn.CAddTable()`;
+summing the outputs from eachoutput layer.
 
 <a name='rnn.Repeater'></a>
 ## Repeater ##
@@ -1340,24 +1302,6 @@ This is because the commensurate row in the `zeroMask` is a one.
 The call to `forward` also disregards the second sample in measuring the `loss`.
 
 This decorator makes it possible to pad sequences with different lengths in the same batch with zero vectors.
-
-<a name='rnn.SeqReverseSequence'></a>
-## SeqReverseSequence ##
-
-```lua
-reverseSeq = nn.SeqReverseSequence(dim)
-```
-
-Reverses an input tensor on a specified dimension. The reversal dimension can be no larger than three.
-
-Example:
-```lua
-input = torch.Tensor({{1,2,3,4,5}, {6,7,8,9,10}})
-reverseSeq = nn.SeqReverseSequence(1)
-print(reverseSeq:forward(input))
-
-Gives us an output of torch.Tensor({{6,7,8,9,10},{1,2,3,4,5}})
-```
 
 <a name='rnn.VariableLength'></a>
 ## VariableLength ##
@@ -1818,21 +1762,48 @@ print(module:forward{ (0,1,1), {(0,0,0),(1,1,1)} })
 ```
 
 
-<a name='nn.ReverseTable'></a>
-## ReverseTable ##
+<a name='nn.ReverseSequence'></a>
+## ReverseSequence ##
 
 ```lua
-module = nn.ReverseTable()
+module = nn.ReverseSequence()
 ```
 
-Reverses the order of elements in a table.
+Reverses the order of elements in a sequence table or a tensor.
 
-Example:
+Example using table:
 
 ```lua
 print(module:forward{1,2,3,4})
 {4,3,2,1}
 ```
+
+Example using tensor:
+
+```lua
+print(module:forward(torch.Tensor({1,2,3,4})))
+ 4
+ 3
+ 2
+ 1
+[torch.DoubleTensor of size 4]
+
+```
+
+<a name='nn.ReverseUnreverse'></a>
+## ReverseUnreverse ##
+
+```lua
+ru = nn.ReverseUnreverse(sequencer)
+```
+
+This module is used internally by the [BiSequencer](#rnn.BiSequencer) module.
+The `ReverseUnreverse` decorates a `sequencer` module like [SeqLSTM](#rnn.SeqLSTM) and [Sequencer](#rnn.Sequencer)
+The `sequencer` module is expected to implement the [AbstractSequencer](#rnn.AbstractSequencer) interface.
+When calling `forward`, the `seqlen x batchsize [x ...]` `input` tensor is reversed using [ReverseSequence](#rnn.ReverseSequence).
+Then the `input` sequences are forwarded (in reverse order) through the `sequencer`.
+The resulting `sequencer.output` sequences are reversed with respect to the `input`.
+Before being returned to the caller, these are unreversed using another `ReverseSequence`.
 
 <a name='nn.PrintSize'></a>
 ## PrintSize ##
