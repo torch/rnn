@@ -21,7 +21,6 @@ function NS:_updateOutput(input)
    assert(input:dim() == 2)
    local output
    if self.train ~= false then
-      self:recycle()
       local rm = self:getStepModule(self.step)
       output = rm:updateOutput(input)
       -- in training mode, we also calculate norm of hidden state

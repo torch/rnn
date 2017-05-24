@@ -60,14 +60,14 @@ function FastLSTM:buildModel()
                         :add(nn.Dropout(self.p,false,false,true,self.mono))
                         :add(nn.Dropout(self.p,false,false,true,self.mono)))
                      :add(nn.ParallelTable()
-                        :add(nn.LinearNoBias(self.outputSize, self.outputSize))
-                        :add(nn.LinearNoBias(self.outputSize, self.outputSize))
-                        :add(nn.LinearNoBias(self.outputSize, self.outputSize))
-                        :add(nn.LinearNoBias(self.outputSize, self.outputSize)))
+                        :add(nn.Linear(self.outputSize, self.outputSize):noBias())
+                        :add(nn.Linear(self.outputSize, self.outputSize):noBias())
+                        :add(nn.Linear(self.outputSize, self.outputSize):noBias())
+                        :add(nn.Linear(self.outputSize, self.outputSize):noBias()))
                      :add(nn.JoinTable(2))
    else
       self.i2g = nn.Linear(self.inputSize, 4*self.outputSize)
-      self.o2g = nn.LinearNoBias(self.outputSize, 4*self.outputSize)
+      self.o2g = nn.Linear(self.outputSize, 4*self.outputSize):noBias()
    end
 
    if self.usenngraph or self.bn then

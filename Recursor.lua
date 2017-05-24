@@ -9,8 +9,6 @@ local Recursor, parent = torch.class('nn.Recursor', 'nn.AbstractRecurrent')
 function Recursor:_updateOutput(input)
    local output
    if self.train ~= false then -- if self.train or self.train == nil then
-      -- set/save the output states
-      self:recycle()
       local stepmodule = self:getStepModule(self.step)
       output = stepmodule:updateOutput(input)
    else

@@ -81,7 +81,6 @@ function Recurrence:_updateOutput(input)
    -- output(t) = stepmodule:forward{input(t), output(t-1)}
    local output
    if self.train ~= false then
-      self:recycle()
       local stepmodule = self:getStepModule(self.step)
       -- the actual forward propagation
       output = stepmodule:updateOutput{input, prevOutput}

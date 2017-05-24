@@ -33,7 +33,6 @@ function RecLSTM:_updateOutput(input)
    -- output(t), cell(t) = lstm{input(t), output(t-1), cell(t-1)}
    local output, cell
    if self.train ~= false then
-      self:recycle()
       local stepmodule = self:getStepModule(self.step)
       -- the actual forward propagation
       output, cell = unpack(stepmodule:updateOutput{input, prevOutput, prevCell})

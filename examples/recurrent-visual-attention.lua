@@ -181,8 +181,7 @@ end
 local xplog = {}
 xplog.opt = opt -- save all hyper-parameters and such
 -- will only serialize params
-xplog.model = nn.Serial(agent)
-xplog.model:mediumSerial()
+xplog.model = agent:sharedClone()
 xplog.criterion = criterion
 xplog.targetmodule = targetmodule
 -- keep a log of NLL for each epoch

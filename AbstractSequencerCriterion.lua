@@ -46,3 +46,9 @@ function AbstractSequencerCriterion:setZeroMask(zeroMask)
    end
 end
 
+function AbstractSequencerCriterion:type(type, typecache)
+   for key, clone in pairs(self.clones) do
+      clone:type(type, typecache)
+   end
+   return parent.type(self, type, typecache)
+end

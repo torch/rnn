@@ -49,7 +49,7 @@ function LSTM:buildGate()
          :add(nn.Linear(self.inputSize, self.outputSize))
    local output2gate = nn.Sequential()
          :add(nn.Dropout(self.p,false,false,true,self.mono))
-         :add(nn.LinearNoBias(self.outputSize, self.outputSize))
+         :add(nn.Linear(self.outputSize, self.outputSize):noBias())
    local para = nn.ParallelTable()
    para:add(input2gate):add(output2gate)
    if self.cell2gate then
@@ -80,7 +80,7 @@ function LSTM:buildHidden()
          :add(nn.Linear(self.inputSize, self.outputSize))
    local output2hidden = nn.Sequential()
          :add(nn.Dropout(self.p,false,false,true,self.mono))
-         :add(nn.LinearNoBias(self.outputSize, self.outputSize))
+         :add(nn.Linear(self.outputSize, self.outputSize):noBias())
    local para = nn.ParallelTable()
    para:add(input2hidden):add(output2hidden)
    hidden:add(para)
@@ -190,7 +190,6 @@ function LSTM:updateOutput(input)
    -- output(t), cell(t) = lstm{input(t), output(t-1), cell(t-1)}
    local output, cell
    if self.train ~= false then
-      self:recycle()
       local stepmodule = self:getStepModule(self.step)
       -- the actual forward propagation
       output, cell = unpack(stepmodule:updateOutput{input, prevOutput, prevCell})

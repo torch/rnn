@@ -129,7 +129,8 @@ if not lm then
       :add(nn.ZipTable()) -- {{x1,x2,...}, {t1,t2,...}} -> {{x1,t1},{x2,t2},...}
 
    -- encapsulate stepmodule into a Sequencer
-   lm:add(nn.Sequencer(nn.MaskZero(ncemodule)))
+   local nce = nn.Sequencer(nn.MaskZero(ncemodule))
+   lm:add(nce)
 
    -- remember previous state between batches
    lm:remember()
@@ -184,8 +185,7 @@ if not xplog then
    xplog.dataset = 'GoogleBillionWords'
    xplog.vocab = trainset.vocab
    -- will only serialize params
-   xplog.model = nn.Serial(lm)
-   xplog.model:mediumSerial()
+   xplog.model = lm:sharedClone()
    xplog.criterion = criterion
    xplog.targetmodule = targetmodule
    -- keep a log of NLL for each epoch
@@ -217,7 +217,7 @@ while opt.maxepoch <= 0 or epoch <= opt.maxepoch do
       inputs = {inputs, targets}
       -- zero-mask
       zeroMask = nn.utils.getZeroMaskSequence(inputs[1], zeroMask)
-      nn.utils.setZeroMask({lm, criterion}, zeroMask, opt.cuda)
+      nn.utils.setZeroMask({criterion, lm}, zeroMask, opt.cuda)
       -- forward
       local outputs = lm:forward(inputs)
       local err = criterion:forward(outputs, targets)
@@ -278,7 +278,7 @@ while opt.maxepoch <= 0 or epoch <= opt.maxepoch do
       targets = targetmodule:forward(targets)
       -- zero-mask
       zeroMask = nn.utils.getZeroMaskSequence(inputs, zeroMask)
-      nn.utils.setZeroMask({lm, criterion}, zeroMask, opt.cuda)
+      nn.utils.setZeroMask({criterion, lm}, zeroMask, opt.cuda)
       -- forward
       local outputs = lm:forward{inputs, targets}
       local err = criterion:forward(outputs, targets)

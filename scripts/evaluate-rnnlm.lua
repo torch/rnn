@@ -44,14 +44,14 @@ if opt.dumpcsv then
    local csvfile = opt.xplogpath:match('([^/]+)[.]t7$')..'.csv'
    paths.mkdir('learningcurves')
    csvpath = paths.concat('learningcurves', csvfile)
-   
+
    local file = io.open(csvpath, 'w')
    file:write("epoch,trainerr,validerr\n")
    for i=1,#trainerr do
       file:write(string.format('%d,%f,%f\n', i, trainerr[i], validerr[i]))
    end
    file:close()
-   
+
    print("CSV file saved to "..csvpath)
    os.exit()
 end
@@ -134,7 +134,7 @@ if opt.nsample > 0 then
    end
 else
    local sumErr, count = 0, 0
-   
+
    for i, inputs, targets in testset:subiter(xplog.opt.seqlen or 100) do
       inputs:apply(function(x)
          if x > 0 then
@@ -147,7 +147,7 @@ else
       local err = criterion:forward(outputs, targets)
       sumErr = sumErr + err
    end
-   
+
    if count ~= testset:size() then
       local meanseqlen = testset:size()/(testset:size() - count)
       print("mean sequence length : "..meanseqlen)

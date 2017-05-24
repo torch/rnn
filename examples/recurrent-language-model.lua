@@ -82,7 +82,6 @@ lm:add(lookup) -- input is seqlen x batchsize
 if opt.dropout > 0 then
    lm:add(nn.Dropout(opt.dropout))
 end
-lm:add(nn.SplitTable(1)) -- tensor to table of tensors
 
 -- rnn layers
 local stepmodule = nn.Sequential() -- applied at each time-step
@@ -140,17 +139,10 @@ end
 
 --[[ loss function ]]--
 
-local crit = nn.ClassNLLCriterion()
-
 -- target is also seqlen x batchsize.
-local targetmodule = nn.SplitTable(1)
-if opt.cuda then
-   targetmodule = nn.Sequential()
-      :add(nn.Convert())
-      :add(targetmodule)
-end
-
-local criterion = nn.SequencerCriterion(crit)
+local targetmodule = opt.cuda and nn.Convert() or nn.Identity()
+-- NLL is applied to each time-step
+local criterion = nn.SequencerCriterion(nn.ClassNLLCriterion())
 
 --[[ CUDA ]]--
 
@@ -160,6 +152,9 @@ if opt.cuda then
    targetmodule:cuda()
 end
 
+-- make sure to call getParameters before sharedClone
+local params, grad_params = lm:getParameters()
+
 --[[ experiment log ]]--
 
 -- is saved to file every time a new validation minima is found
@@ -168,8 +163,7 @@ xplog.opt = opt -- save all hyper-parameters and such
 xplog.dataset = 'PennTreeBank'
 xplog.vocab = trainset.vocab
 -- will only serialize params
-xplog.model = nn.Serial(lm)
-xplog.model:mediumSerial()
+xplog.model = lm:sharedClone()
 xplog.criterion = criterion
 xplog.targetmodule = targetmodule
 -- keep a log of NLL for each epoch
@@ -178,8 +172,6 @@ xplog.valppl = {}
 -- will be used for early-stopping
 xplog.minvalppl = 99999999
 xplog.epoch = 0
-
-local params, grad_params = lm:getParameters()
 
 local adamconfig = {
    beta1 = opt.adamconfig[1],
