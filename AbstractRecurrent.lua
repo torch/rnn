@@ -33,6 +33,9 @@ function AbstractRecurrent:getStepModule(step)
 end
 
 function AbstractRecurrent:updateOutput(input)
+   if self.train ~= false then
+      self:recycle()
+   end
    if self.zeroMask then
       -- where zeroMask = 1, the past is forgotten, that is, the output/gradOutput is zeroed
       local stepmodule = (self.train==false) and self.modules[1] or self:getStepModule(self.step)
@@ -189,6 +192,7 @@ end
 
 function AbstractRecurrent:maskZero(v1)
    if not self.maskzero then
+      assert(not torch.isTypeOf(self.modules[1], 'nn.AbstractRecurrent'), "Doesn't support zero-masking on nested AbstractRecurrent instances")
       self.maskzero = true
       local stepmodule = nn.MaskZero(self.modules[1], v1)
       self.sharedClones = {stepmodule}

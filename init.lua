@@ -33,56 +33,24 @@ require('rnn.Sequential')
 require('rnn.ParallelTable')
 require('rnn.LookupTable')
 require('rnn.Dropout')
-
--- extensions to existing criterions
-require('rnn.Criterion')
-
--- decorator modules
-require('rnn.Serial')
-
--- extensions to make serialization more efficient
-require('rnn.SpatialMaxPooling')
-require('rnn.SpatialConvolution')
-require('rnn.SpatialConvolutionMM')
-require('rnn.SpatialBatchNormalization')
 require('rnn.BatchNormalization')
 
+-- extensions to existing nn.Criterion
+require('rnn.Criterion')
 
 -- modules
 require('rnn.LookupTableMaskZero')
 require('rnn.MaskZero')
-require('rnn.PrintSize')
-require('rnn.Convert')
-require('rnn.Constant')
-require('rnn.Collapse')
-require('rnn.ZipTable')
-require('rnn.ZipTableOneToMany')
-require('rnn.CAddTensorTable')
 require('rnn.ReverseSequence')
-require('rnn.Dictionary')
-require('rnn.Inception')
-require('rnn.Clip')
-require('rnn.SpatialUniformCrop')
 require('rnn.SpatialGlimpse')
-require('rnn.WhiteNoise')
 require('rnn.ArgMax')
 require('rnn.CategoricalEntropy')
 require('rnn.TotalDropout')
-require('rnn.Kmeans')
-require('rnn.OneHot')
-require('rnn.SpatialRegionDropout')
-require('rnn.FireModule')
-require('rnn.SpatialFeatNormalization')
-require('rnn.ZeroGrad')
-require('rnn.LinearNoBias')
 require('rnn.SAdd')
 require('rnn.CopyGrad')
 require('rnn.VariableLength')
 require('rnn.StepLSTM')
 require('rnn.StepGRU')
-require('rnn.SpatialBinaryConvolution')
-require('rnn.SimpleColorTransform')
-require('rnn.PCAColorTransform')
 require('rnn.ReverseUnreverse')
 
 -- Noise Contrastive Estimation
@@ -99,11 +67,6 @@ require('rnn.ReinforceCategorical')
 -- REINFORCE criterions
 require('rnn.VRClassReward')
 require('rnn.BinaryClassReward')
-
--- criterions
-require('rnn.ModuleCriterion')
-require('rnn.BinaryLogisticRegression')
-require('rnn.SpatialBinaryLogisticRegression')
 
 -- for testing:
 require('rnn.test')

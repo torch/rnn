@@ -17,21 +17,15 @@ SET(luasrc
   AbstractSequencer.lua
   AbstractSequencerCriterion.lua
   BiSequencer.lua
-  deprecated/BiSequencerLM.lua
   CopyGrad.lua
   Dropout.lua
   ExpandAs.lua
-  deprecated/FastLSTM.lua
-  deprecated/GRU.lua
-  LinearNoBias.lua
   LookupTableMaskZero.lua
-  deprecated/LSTM.lua
   MaskZero.lua
   MaskZeroCriterion.lua
   Module.lua
   Mufuru.lua
   NormStabilizer.lua
-  Padding.lua
   Recurrence.lua
   RecurrentAttention.lua
   Recursor.lua
@@ -42,11 +36,8 @@ SET(luasrc
   SeqBLSTM.lua
   SeqGRU.lua
   SeqLSTM.lua
-  deprecated/SeqLSTMP.lua
-  deprecated/SeqReverseSequence.lua
   Sequencer.lua
   SequencerCriterion.lua
-  ZeroGrad.lua
   test/bigtest.lua
   test/test.lua
   VariableLength.lua
@@ -60,27 +51,13 @@ SET(luasrc
   ArgMax.lua
   BatchNormalization.lua
   BinaryClassReward.lua
-  BinaryLogisticRegression.lua
-  CAddTensorTable.lua
   CategoricalEntropy.lua
-  Clip.lua
-  Collapse.lua
-  Constant.lua
   Container.lua
-  Convert.lua
   Criterion.lua
-  Dictionary.lua
-  FireModule.lua
-  Inception.lua
-  Kmeans.lua
   LookupTable.lua
-  ModuleCriterion.lua
   NCECriterion.lua
   NCEModule.lua
-  OneHot.lua
-  PCAColorTransform.lua
   ParallelTable.lua
-  PrintSize.lua
   Reinforce.lua
   ReinforceBernoulli.lua
   ReinforceCategorical.lua
@@ -88,24 +65,16 @@ SET(luasrc
   ReinforceNormal.lua
   ReverseSequence.lua
   Sequential.lua
-  Serial.lua
-  SimpleColorTransform.lua
-  SpatialBatchNormalization.lua
-  SpatialBinaryConvolution.lua
-  SpatialBinaryLogisticRegression.lua
-  SpatialConvolution.lua
-  SpatialConvolutionMM.lua
-  SpatialFeatNormalization.lua
   SpatialGlimpse.lua
-  SpatialMaxPooling.lua
-  SpatialRegionDropout.lua
-  SpatialUniformCrop.lua
   TotalDropout.lua
   VRClassReward.lua
-  WhiteNoise.lua
-  ZipTable.lua
-  ZipTableOneToMany.lua
   ReverseUnreverse.lua
+  deprecated/SeqLSTMP.lua
+  deprecated/SeqReverseSequence.lua
+  deprecated/BiSequencerLM.lua
+  deprecated/FastLSTM.lua
+  deprecated/GRU.lua
+  deprecated/LSTM.lua
 )
 
 ADD_TORCH_PACKAGE(rnn "${src}" "${luasrc}" "An RNN library for Torch")

@@ -7,8 +7,8 @@ This library includes documentation for the following objects:
 Modules that consider successive calls to `forward` as different time-steps in a sequence :
  * [AbstractRecurrent](#rnn.AbstractRecurrent) : an abstract class inherited by `Recurrence` and `RecLSTM`;
  * [Recurrence](#rnn.Recurrence) : decorates a module that outputs `output(t)` given `{input(t), output(t-1)}`;
-  * [LookupRNN](#rnn.LookupRNN): implements a simple RNN where the input layer is a `LookupTable`;
-  * [LinearRNN](#rnn.LinearRNN): implements a simple RNN where the input layer is a `Linear`;
+   * [LookupRNN](#rnn.LookupRNN): implements a simple RNN where the input layer is a `LookupTable`;
+   * [LinearRNN](#rnn.LinearRNN): implements a simple RNN where the input layer is a `Linear`;
  * [RecLSTM](#rnn.RecLSTM) : an LSTM that can be used for real-time RNNs;
  * [RecGRU](#rnn.RecGRU) : an GRU that can be used for real-time RNNs;
  * [Recursor](#rnn.Recursor) : decorates a module to make it conform to the [AbstractRecurrent](#rnn.AbstractRecurrent) interface;
@@ -21,8 +21,8 @@ Modules that `forward` entire sequences through a decorated `AbstractRecurrent` 
  * [SeqLSTM](#rnn.SeqLSTM) : a faster version of `nn.Sequencer(nn.RecLSTM)` where the `input` and `output` are tensors;
  * [SeqGRU](#rnn.SeqGRU) : a faster version of `nn.Sequencer(nn.RecGRU)` where the `input` and `output` are tensors;
  * [BiSequencer](#rnn.BiSequencer) : used for implementing Bidirectional RNNs;
-  * [SeqBLSTM](#rnn.SeqBLSTM) : bidirectional LSTM that uses two `SeqLSTMs` internally;
-  * [SeqBGRU](#rnn.SeqBGRU) : bidirectional GRU that uses two `SeqGRUs` internally;
+   * [SeqBLSTM](#rnn.SeqBLSTM) : bidirectional LSTM that uses two `SeqLSTMs` internally;
+   * [SeqBGRU](#rnn.SeqBGRU) : bidirectional GRU that uses two `SeqGRUs` internally;
  * [Repeater](#rnn.Repeater) : repeatedly applies the same input to an `AbstractRecurrent` instance;
  * [RecurrentAttention](#rnn.RecurrentAttention) : a generalized attention model for [REINFORCE modules](https://github.com/nicholas-leonard/dpnn#nn.Reinforce);
 
@@ -34,45 +34,17 @@ Miscellaneous modules and criterions :
  * [MaskZeroCriterion](#rnn.MaskZeroCriterion) : zeros the `gradInput` and `loss` rows of the decorated criterion for commensurate
    * `input` rows which are tensors of zeros (version 1);
    * `zeroMask` elements which are 1 (version 2);
+ * [ReverseSequence](#nn.ReverseSequence) : reverse the order of elements in a sequence (table or tensor);
+ * [ReverseUnreverse](#nn.ReverseUnreverse) : used internally by `nn.BiSequencer` for decorating `bwd` RNN.
+ * [SpatialGlimpse](#nn.SpatialGlimpse) : takes a fovead glimpse of an image at a given location;
+ * [NCEModule](#nn.NCEModule) : optimized placeholder for a `Linear` + `SoftMax` using [noise-contrastive estimation](https://www.cs.toronto.edu/~amnih/papers/ncelm.pdf).
+ * [NCECriterion](#nn.NCECriterion) : criterion exclusively used with [NCEModule](#nn.NCEModule);
  * [VariableLength](#rnn.VariableLength): decorates a `Sequencer` to accept and produce a table of variable length inputs and outputs;
 
 Criterions used for handling sequential inputs and targets :
  * [AbstractSequencerCriterion](#rnn.AbstractSequencerCriterion) : abstact class for criterions that handle sequences (tensor or table);
  * [SequencerCriterion](#rnn.SequencerCriterion) : sequentially applies the same criterion to a sequence of inputs and targets;
  * [RepeaterCriterion](#rnn.RepeaterCriterion) : repeatedly applies the same criterion with the same target on a sequence.
-
-
-This package also provides many useful features that aren't part of the main nn package.
-These include [sharedClone](#nn.Module.sharedClone), which allows you to clone a module and share
-parameters or gradParameters with the original module, without incuring any memory overhead.
-We also redefined [type](#nn.Module.type) such that the type-cast preserves Tensor sharing within a structure of modules.
-
-The package provides the following Modules:
-
- * [Serial](#nn.Serial) : decorate a module makes its serialized output more compact ;
- * [Inception](#nn.Inception) : implements the Inception module of the GoogleLeNet article ;
- * [Collapse](#nn.Collapse) : just like `nn.View(-1)`;
- * [Convert](#nn.Convert) : convert between different tensor types or shapes;
- * [ZipTable](#nn.ZipTable) : zip a table of tables into a table of tables;
- * [ZipTableOneToMany](#nn.ZipTableOneToMany) : zip a table of element `el` and table of elements into a table of pairs of element `el` and table elements;
- * [CAddTensorTable](#nn.CAddTensorTable) : adds a tensor to a table of tensors of the same size;
- * [ReverseSequence](#nn.ReverseSequence) : reverse the order of elements in a sequence (table or tensor);
- * [ReverseUnreverse](#nn.ReverseUnreverse) : used internally by `nn.BiSequencer` for decorating `bwd` RNN.
- * [PrintSize](#nn.PrintSize) : prints the size of inputs and gradOutputs (useful for debugging);
- * [Clip](#nn.Clip) : clips the inputs to a min and max value;
- * [Constant](#nn.Constant) : outputs a constant value given an input (which is ignored);
- * [SpatialUniformCrop](#nn.SpatialUniformCrop) : uniformly crops patches from a input;
- * [SpatialGlimpse](#nn.SpatialGlimpse) : takes a fovead glimpse of an image at a given location;
- * [WhiteNoise](#nn.WhiteNoise) : adds isotropic Gaussian noise to the signal when in training mode;
- * [OneHot](#nn.OneHot) : transforms a tensor of indices into [one-hot](https://en.wikipedia.org/wiki/One-hot) encoding;
- * [Kmeans](#nn.Kmeans) : [Kmeans](https://en.wikipedia.org/wiki/K-means_clustering) clustering layer. Forward computes distances with respect to centroids and returns index of closest centroid. Centroids can be updated using gradient descent. Centroids could be initialized randomly or by using [kmeans++](https://en.wikipedia.org/wiki/K-means%2B%2B) algoirthm;
- * [SpatialRegionDropout](#nn.SpatialRegionDropout) : Randomly dropouts a region (top, bottom, leftmost, rightmost) of the input image. Works with batch and any number of channels;
- * [FireModule](#nn.FireModule) : FireModule as mentioned in the [SqueezeNet](http://arxiv.org/pdf/1602.07360v1.pdf);
- * [NCEModule](#nn.NCEModule) : optimized placeholder for a `Linear` + `SoftMax` using [noise-contrastive estimation](https://www.cs.toronto.edu/~amnih/papers/ncelm.pdf).
- * [SpatialFeatNormalization](#nn.SpatialFeatNormalization) : Module for widely used preprocessing step of mean zeroing and standardization for images.
- * [SpatialBinaryConvolution](#nn.SpatialBinaryConvolution) : Module for binary spatial convolution (Binary weights) as mentioned in [XNOR-Net](http://arxiv.org/pdf/1603.05279v2.pdf).
- * [SimpleColorTransform](#nn.SimpleColorTransform) : Module for adding independent random noise to input image channels.
- * [PCAColorTransform](#nn.PCAColorTransform) : Module for adding noise to input image using Principal Components Analysis.
 
 The following modules and criterions can be used to implement the REINFORCE algorithm :
 
@@ -83,14 +55,6 @@ The following modules and criterions can be used to implement the REINFORCE algo
  * [ReinforceCategorical](#nn.ReinforceCategorical) : samples from Categorical (Multinomial with one sample) distribution;
  * [VRClassReward](#nn.VRClassReward) : criterion for variance-reduced classification-based reward;
  * [BinaryClassReward](#nn.BinaryClassReward) : criterion for variance-reduced binary classification reward (like `VRClassReward`, but for binary classes);
-
-Additional differentiable criterions
- * [BinaryLogisticRegression](#nn.BLR) : criterion for binary logistic regression;
- * [SpatialBinaryLogisticRegression](#nn.SpatialBLR) : criterion for pixel wise binary logistic regression;
- * [NCECriterion](#nn.NCECriterion) : criterion exclusively used with [NCEModule](#nn.NCEModule).
- * [ModuleCriterion](#nn.ModuleCriterion) : adds an optional `inputModule` and `targetModule` before a decorated criterion;
- * [BinaryLogisticRegression](#nn.BLR) : criterion for binary logistic regression.
- * [SpatialBinaryLogisticRegression](#nn.SpatialBLR) : criterion for pixel wise binary logistic regression.
 
 
 <a name='rnn.examples'></a>
@@ -122,7 +86,6 @@ If you are using CUDA :
 ```bash
 luarocks install cutorch
 luarocks install cunn
-luarocks install cunnx
 ```
 
 And don't forget to update this package :
@@ -130,7 +93,7 @@ And don't forget to update this package :
 luarocks install rnn
 ```
 
-If that doesn't fix it, open and issue on github.
+If that doesn't fix it, open an issue on github.
 
 <a name='rnn.AbstractRecurrent'></a>
 ## AbstractRecurrent ##
@@ -1544,224 +1507,6 @@ i.e. each example in a batch has its own scalar reward.
 Refer to [this example](https://github.com/Element-Research/rnn/blob/master/examples/recurrent-visual-attention.lua)
 for a complete training script making use of the REINFORCE interface.
 
-<a name='nn.Serial'></a>
-## Serial ##
-
-```lua
-dmodule = nn.Serial(module, [tensortype])
-dmodule:[light,medium,heavy]Serial()
-```
-
-This module is a decorator that can be used to control the serialization/deserialization
-behavior of the encapsulated module. Basically, making the resulting string or
-file heavy (the default), medium or light in terms of size.
-
-Furthermore, when specified, the `tensortype` attribute (e.g *torch.FloatTensor*, *torch.DoubleTensor* and so on.),
-determines what type the module will be cast to during serialization.
-Note that this will also be the type of the deserialized object.
-The default serialization `tensortype` is `nil`, i.e. the module is serialized as is.
-
-The `heavySerial()` has the serialization process serialize every attribute in the module graph,
-which is the default behavior of nn.
-
-The `mediumSerial()` has the serialization process serialize
-everything except the attributes specified in each module's `dpnn_mediumEmpty`
-table, which has a default value of `{'output', 'gradInput', 'momGradParams', 'dpnn_input'}`.
-During serialization, whether they be tables or Tensors, these attributes are emptied (no storage).
-Some modules overwrite the default `Module.dpnn_mediumEmpty` static attribute with their own.
-
-The `lightSerial()` has the serialization process empty
-everything a call to `mediumSerial(type)` would (so it uses `dpnn_mediumEmpty`).
-But also empties all the parameter gradients specified by the
-attribute `dpnn_gradParameters`, which defaults to `{gradWeight, gradBias}`.
-
-We recomment using `mediumSerial()` for training, and `lightSerial()` for
-production (feed-forward-only models).
-
-<a name='nn.Inception'></a>
-## Inception ##
-References :
-
-  * A. [Going Deeper with Convolutions](http://arxiv.org/abs/1409.4842)
-  * B. [GoogleLeNet](http://image-net.org/challenges/LSVRC/2014/slides/GoogLeNet.pptx)
-
-```lua
-module = nn.Inception(config)
-```
-
-This module uses `n`+2 parallel "columns".
-The original paper uses 2+2 where the first two are (but there could be more than two):
-
-  * 1x1 conv (reduce) -> relu -> 5x5 conv -> relu
-  * 1x1 conv (reduce) -> relu -> 3x3 conv -> relu
-
-and where the other two are :
-
-  * 3x3 maxpool -> 1x1 conv (reduce/project) -> relu
-  * 1x1 conv (reduce) -> relu.
-
-This module allows the first group of columns to be of any
-number while the last group consist of exactly two columns.
-The 1x1 convoluations are used to reduce the number of input channels
-(or filters) such that the capacity of the network doesn't explode.
-We refer to these here has *reduce*.
-Since each column seems to have one and only one reduce, their initial
-configuration options are specified in lists of n+2 elements.
-
-The sole argument `config` is a table taking the following key-values :
-
-  * Required Arguments :
-   * `inputSize` : number of input channels or colors, e.g. 3;
-   * `outputSize` : numbers of filters in the non-1x1 convolution kernel sizes, e.g. `{32,48}`
-   * `reduceSize` : numbers of filters in the 1x1 convolutions (reduction) used in each column, e.g. `{48,64,32,32}`. The last 2 are used respectively for the max pooling (projection) column (the last column in the paper) and the column that has nothing but a 1x1 conv (the first column in the paper). This table should have two elements more than the outputSize
-  * Optional Arguments :
-   * `reduceStride` : strides of the 1x1 (reduction) convolutions. Defaults to `{1,1,...}`.
-   * `transfer` : transfer function like `nn.Tanh`,`nn.Sigmoid`, `nn.ReLU`, `nn.Identity`, etc. It is used after each reduction (1x1 convolution) and convolution. Defaults to `nn.ReLU`.
-   * `batchNorm` : set this to `true` to use batch normalization. Defaults to `false`. Note that batch normalization can be awesome
-   * `padding` : set this to `true` to add padding to the input of the convolutions such that output width and height are same as that of the original non-padded `input`. Defaults to `true`.
-   * `kernelSize` : size (`height = width`) of the non-1x1 convolution kernels. Defaults to `{5,3}`.
-   * `kernelStride` : stride of the kernels (`height = width`) of the convolution. Defaults to `{1,1}`
-   * `poolSize`: size (`height = width`) of the spatial max pooling used in the next-to-last column. Defaults to 3.
-   * `poolStride` : stride (`height = width`) of the spatial max pooling. Defaults to 1.
-
-
-For a complete example using this module, refer to the following :
- * [deep inception training script](https://github.com/nicholas-leonard/dp/blob/master/examples/deepinception.lua) ;
- * [openface facial recognition](https://github.com/cmusatyalab/openface) (the model definition is [here](https://github.com/cmusatyalab/openface/blob/master/models/openface/nn4.def.lua)).
-
-<a name='nn.Collapse'></a>
-## Collapse ##
-
-```lua
-module = nn.Collapse(nInputDim)
-```
-
-This module is the equivalent of:
-```
-view = nn.View(-1)
-view:setNumInputDim(nInputDim)
-```
-It collapses all non-batch dimensions. This is useful for converting
-a spatial feature map to the single dimension required by a dense
-hidden layer like Linear.
-
-<a name='nn.Convert'></a>
-## Convert ##
-
-```lua
-module = nn.Convert([inputShape, outputShape])
-```
-Module to convert between different data formats.
-For example, we can flatten images by using :
-```lua
-module = nn.Convert('bchw', 'bf')
-```
-or equivalently
-```lua
-module = nn.Convert('chw', 'f')
-```
-Lets try it with an input:
-```lua
-print(module:forward(torch.randn(3,2,3,1)))
- 0.5692 -0.0190  0.5243  0.7530  0.4230  1.2483
--0.9142  0.6013  0.5608 -1.0417 -1.4014  1.0177
--1.5207 -0.1641 -0.4166  1.4810 -1.1725 -1.0037
-[torch.DoubleTensor of size 3x6]
-```
-You could also try:
-
-```lua
-module = nn.Convert('chw', 'hwc')
-input = torch.randn(1,2,3,2)
-input:select(2,1):fill(1)
-input:select(2,2):fill(2)
-print(input)
-(1,1,.,.) =
-  1  1
-  1  1
-  1  1
-(1,2,.,.) =
-  2  2
-  2  2
-  2  2
-[torch.DoubleTensor of size 1x2x3x2]
-print(module:forward(input))
-(1,1,.,.) =
-  1  2
-  1  2
-
-(1,2,.,.) =
-  1  2
-  1  2
-
-(1,3,.,.) =
-  1  2
-  1  2
-[torch.DoubleTensor of size 1x3x2x2]
-```
-
-
-Furthermore, it automatically converts the `input` to have the same type as `self.output`
-(i.e. the type of the module).
-So you can also just use is for automatic input type converions:
-```lua
-module = nn.Convert()
-print(module.output) -- type of module
-[torch.DoubleTensor with no dimension]
-input = torch.FloatTensor{1,2,3}
-print(module:forward(input))
- 1
- 2
- 3
-[torch.DoubleTensor of size 3]
-```
-
-<a name='nn.ZipTable'></a>
-## ZipTable ##
-
-```lua
-module = nn.ZipTable()
-```
-
-Zips a table of tables into a table of tables.
-
-Example:
-```lua
-print(module:forward{ {'a1','a2'}, {'b1','b2'}, {'c1','c2'} })
-{ {'a1','b1','c1'}, {'a2','b2','c2'} }
-```
-
-<a name='nn.ZipTableOneToMany'></a>
-## ZipTableOneToMany ##
-
-```lua
-module = nn.ZipTableOneToMany()
-```
-
-Zips a table of element `el` and table of elements `tab` into a table of tables, where the i-th table contains the element `el` and the i-th element in table `tab`
-
-Example:
-```lua
-print(module:forward{ 'el', {'a','b','c'} })
-{ {'el','a'}, {'el','b'}, {'el','c'} }
-```
-
-<a name='nn.CAddTensorTable'></a>
-## CAddTensorTable ##
-
-```lua
-module = nn.CAddTensorTable()
-```
-
-Adds the first element `el` of the input table `tab` to each tensor contained in the second element of `tab`, which is itself a table
-
-Example:
-```lua
-print(module:forward{ (0,1,1), {(0,0,0),(1,1,1)} })
-{ (0,1,1), (1,2,2) }
-```
-
-
 <a name='nn.ReverseSequence'></a>
 ## ReverseSequence ##
 
@@ -1805,67 +1550,6 @@ Then the `input` sequences are forwarded (in reverse order) through the `sequenc
 The resulting `sequencer.output` sequences are reversed with respect to the `input`.
 Before being returned to the caller, these are unreversed using another `ReverseSequence`.
 
-<a name='nn.PrintSize'></a>
-## PrintSize ##
-
-```lua
-module = nn.PrintSize(name)
-```
-
-This module is useful for debugging complicated module composites.
-It prints the size of the `input` and `gradOutput` during `forward`
-and `backward` propagation respectively.
-The `name` is a string used to identify the module along side the printed size.
-
-<a name='nn.Clip'></a>
-## Clip ##
-
-```lua
-module = nn.Clip(minval, maxval)
-```
-
-This module clips `input` values such that the output is between `minval` and `maxval`.
-
-<a name='nn.Constant'></a>
-## Constant ##
-
-```lua
-module = nn.Constant(value, nInputDim)
-```
-
-This module outputs a constant value given an input.
-If `nInputDim` is specified, it uses the input to determine the size of the batch.
-The `value` is then replicated over the batch.
-Otherwise, the `value` Tensor is output as is.
-During `backward`, the returned `gradInput` is a zero Tensor of the same size as the `input`.
-This module has no trainable parameters.
-
-You can use this with nn.ConcatTable() to append constant inputs to an input :
-
-```lua
-nn.ConcatTable():add(nn.Constant(v)):add(nn.Identity())
-```
-
-This is useful when you want to output a value that is independent of the
-input to the neural network (see [this example](https://github.com/Element-Research/rnn/blob/master/examples/recurrent-visual-attention.lua)).
-
-<a name='nn.SpatialUniformCrop'></a>
-## SpatialUniformCrop ##
-
-```lua
-module = nn.SpatialUniformCrop(oheight, owidth)
-```
-
-During training, this module will output a cropped patch of size `oheight, owidth`
-within the boundaries of the `input` image.
-For each example, a location is sampled from a uniform distribution
-such that each possible patch has an equal probability of being sampled.
-
-During evaluation, the center patch is cropped and output.
-
-This module is commonly used at the input layer to artificially
-augment the size of the dataset to prevent overfitting.
-
 <a name='nn.SpatialGlimpse'></a>
 ## SpatialGlimpse ##
 Ref. A. [Recurrent Model for Visual Attention](http://papers.nips.cc/paper/5542-recurrent-models-of-visual-attention.pdf)
@@ -1891,187 +1575,6 @@ So basically, this module can be used to focus the attention of the model
 on a region of the input `image`.
 It is commonly used with the [RecurrentAttention](https://github.com/Element-Research/rnn#rnn.RecurrentAttention)
 module (see [this example](https://github.com/Element-Research/rnn/blob/master/examples/recurrent-visual-attention.lua)).
-
-<a name='nn.WhiteNoise'></a>
-## WhiteNoise ##
-
-```lua
-module = nn.WhiteNoise([mean, stdev])
-```
-
-Useful in training [Denoising Autoencoders] (http://arxiv.org/pdf/1507.02672v1.pdf).
-Takes `mean` and `stdev` of the normal distribution as input.
-Default values for mean and standard deviation are 0 and 0.1 respectively.
-With `module:training()`, noise is added during forward.
-During `backward` gradients are passed as it is.
-With `module:evaluate()` the mean is added to the input.
-
-<a name='nn.SpatialRegionDropout'></a>
-## SpatialRegionDropout ##
-
-```lua
-module = nn.SpatialRegionDropout(p)
-```
-Following is an example of `SpatialRegionDropout` outputs on the famous lena image.
-
-**Input**
-
-![Lena](tutorials/lena.jpg)
-
-**Outputs**
-
-![Lena](tutorials/srd1.jpg)           ![Lena](tutorials/srd2.jpg)
-
-<a name='nn.FireModule'></a>
-## FireModule ##
-Ref: http://arxiv.org/pdf/1602.07360v1.pdf
-```lua
-module = nn.FireModule(nInputPlane, s1x1, e1x1, e3x3, activation)
-```
-FireModule is comprised of two submodules 1) A *squeeze* convolution module comprised of `1x1` filters followed by 2) an *expand* module that is comprised of a mix of `1x1` and `3x3` convolution filters.
-Arguments: `s1x1`: number of `1x1` filters in the squeeze submodule, `e1x1`: number of `1x1` filters in the expand submodule, `e3x3`: number of `3x3` filters in the expand submodule. It is recommended that `s1x1` be less than `(e1x1+e3x3)` if you want to limit the number of input channels to the `3x3` filters in the expand submodule.
-FireModule works only with batches, for single sample convert the sample to a batch of size 1.
-
-<a name='nn.SpatialFeatNormalization'></a>
-## SpatialFeatNormalization ##
-```lua
-module = nn.SpatialFeatNormalization(mean, std)
-```
-This module normalizies each feature channel of input image based on its corresponding mean and standard deviation scalar values. This module does not learn the `mean` and `std`, they are provided as arguments.
-
-<a name='nn.SpatialBinaryConvolution'></a>
-## SpatialBinaryConvolution ##
-
-```lua
-module = nn.SpatialBinaryConvolution(nInputPlane, nOutputPlane, kW, kH)
-```
-Functioning of SpatialBinaryConvolution is similar to nn/SpatialConvolution. Only difference is that Binary weights are used for forward/backward and floating point weights are used for weight updates. Check **Binary-Weight-Network** section of [XNOR-net](http://arxiv.org/pdf/1603.05279v2.pdf).
-
-<a name='nn.SimpleColorTransform'></a>
-## SimpleColorTransform ##
-
-```lua
-range = torch.rand(inputChannels) -- Typically range is specified by user.
-module = nn.SimpleColorTransform(inputChannels, range)
-```
-This module performs a simple data augmentation technique. SimpleColorTransform module adds random noise to each color channel independently. In more advanced data augmentation technique noise is added using principal components of color channels. For that please check **PCAColorTransform**
-
-<a name='nn.PCAColorTransform'></a>
-## PCAColorTransform ##
-
-```lua
-eigenVectors = torch.rand(inputChannels, inputChannels) -- Eigen Vectors
-eigenValues = torch.rand(inputChannels) -- Eigen
-std = 0.1 -- Std deviation of normal distribution with mean zero for noise.
-module = nn.PCAColorTransform(inputChannels, eigenVectors, eigenValues, std)
-```
-This module performs a data augmentation using Principal Component analysis of pixel values. When in training mode, mulitples of principal components are added to input image pixels. Magnitude of value added (noise) is dependent upon the corresponding eigen value and a random value sampled from a Gaussian distribution with mean zero and `std` (default 0.1) standard deviation. This technique was used in the famous [AlexNet](https://papers.nips.cc/paper/4824-imagenet-classification-with-deep-convolutional-neural-networks.pdf) paper.
-
-<a name = 'nn.OneHot'></a>
-## OneHot ##
-
-```lua
-module = nn.OneHot(outputSize)
-```
-
-Transforms a tensor of `input` indices having integer values between 1 and `outputSize` into
-a tensor of one-hot vectors of size `outputSize`.
-
-Forward an index to get a one-hot vector :
-
-```lua
-> module = nn.OneHot(5) -- 5 classes
-> module:forward(torch.LongTensor{3})
- 0  0  1  0  0
-[torch.DoubleTensor of size 1x5]
-```
-
-Forward a batch of 3 indices. Notice that these need not be stored as `torch.LongTensor` :
-
-```lua
-> module:forward(torch.Tensor{3,2,1})
- 0  0  1  0  0
- 0  1  0  0  0
- 1  0  0  0  0
-[torch.DoubleTensor of size 3x5]
-```
-
-Forward batch of `2 x 3` indices :
-
-```lua
-oh:forward(torch.Tensor{{3,2,1},{1,2,3}})
-(1,.,.) =
-  0  0  1  0  0
-  0  1  0  0  0
-  1  0  0  0  0
-
-(2,.,.) =
-  1  0  0  0  0
-  0  1  0  0  0
-  0  0  1  0  0
-[torch.DoubleTensor of size 2x3x5]
-```
-
-<a name='nn.Kmeans'></a>
-## Kmeans ##
-
-```lua
-km = nn.Kmeans(k, dim)
-```
-
-`k` is the number of centroids and `dim` is the dimensionality of samples.
-You can either initialize centroids randomly from input samples or by using *kmeans++* algorithm.
-
-```lua
-km:initRandom(samples) -- Randomly initialize centroids from input samples.
-km:initKmeansPlus(samples) -- Use Kmeans++ to initialize centroids.
-```
-
-Example showing how to use Kmeans module to do standard Kmeans clustering.
-
-```lua
-attempts = 10
-iter = 100 -- Number of iterations
-bestKm = nil
-bestLoss = math.huge
-learningRate = 1
-for j=1, attempts do
-   local km = nn.Kmeans(k, dim)
-   km:initKmeansPlus(samples)
-   for i=1, iter do
-      km:zeroGradParameters()
-      km:forward(samples) -- sets km.loss
-      km:backward(samples, gradOutput) -- gradOutput is ignored
-
-      -- Gradient Descent weight/centroids update
-      km:updateParameters(learningRate)
-   end
-
-   if km.loss < bestLoss then
-      bestLoss = km.loss
-      bestKm = km:clone()
-   end
-end
-```
-`nn.Kmeans()` module maintains loss only for the latest forward. If you want to maintain loss over the whole dataset then you who would need do it my adding the module loss for every forward.
-
-You can also use `nn.Kmeans()` as an auxillary layer in your network.
-A call to `forward` will generate an `output` containing the index of the nearest cluster for each sample in the batch.
-The `gradInput` generated by `updateGradInput` will be zero.
-
-<a name='nn.ModuleCriterion'></a>
-## ModuleCriterion ##
-
-```lua
-criterion = nn.ModuleCriterion(criterion [, inputModule, targetModule, castTarget])
-```
-
-This criterion decorates a `criterion` by allowing the `input` and `target` to be
-fed through an optional `inputModule` and `targetModule` before being passed to the
-`criterion`. The `inputModule` must not contain parameters as these would not be updated.
-
-When `castTarget = true` (the default), the `targetModule` is cast along with the `inputModule` and
-`criterion`. Otherwise, the `targetModule` isn't.
 
 <a name='nn.NCEModule'></a>
 ## NCEModule
@@ -2350,40 +1853,3 @@ So basically, the `input` is still a table of two tensors.
 The first input tensor is of size `batchsize` containing Bernoulli probabilities.
 The second input tensor is the baseline prediction described in `VRClassReward`.
 The targets contain zeros and ones.
-
-<a name='nn.BLR'></a>
-## BinaryLogisticRegression ##
-Ref A. [Learning to Segment Object Candidates](http://arxiv.org/pdf/1506.06204v2.pdf)
-This criterion implements the score criterion mentioned in (ref. A).
-
-```lua
-criterion = nn.BinaryLogisticRegression()
-```
-
-BinaryLogisticRegression implements following cost function for binary classification.
-
-```
-
- log( 1 + exp( -y_k * score(x_k) ) )
-
-```
-where `y_k` is binary target `score(x_k)` is the corresponding prediction. `y_k` has value `{-1, +1}` and `score(x_k)` has value in `[-1, +1]`.
-
-<a name='nn.SpatialBLR'></a>
-## SpatialBinaryLogisticRegression ##
-Ref A. [Learning to Segment Object Candidates](http://arxiv.org/pdf/1506.06204v2.pdf)
-
-This criterion implements the spatial component of the criterion mentioned in  (ref. A).
-
-```lua
-criterion = nn.SpatialBinaryLogisticRegression()
-```
-
-SpatialBinaryLogisticRegression implements following cost function for binary pixel classification.
-```
-   1
-_______ sum_ij [ log( 1 + exp( -m_ij * f_ij ) ) ]
- 2*w*h
-```
-where `m_ij` is target binary image and `f_ij` is the corresponding prediction. `m_ij` has value `{-1, +1}` and `f_ij` has value in `[-1, +1]`.
-

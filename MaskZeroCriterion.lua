@@ -7,7 +7,7 @@ local MaskZeroCriterion, parent = torch.class("nn.MaskZeroCriterion", "nn.Criter
 
 function MaskZeroCriterion:__init(criterion, v1)
    parent.__init(self)
-   self.criterion = criterion
+   self.criterion = assert(criterion)
    assert(torch.isTypeOf(criterion, 'nn.Criterion'))
    self.v2 = not v1
 end
@@ -28,11 +28,12 @@ function MaskZeroCriterion:updateOutput(input, target)
    if self.isEmptyBatch then
       self.output = 0
    else
+      local first = nn.utils.recursiveGetFirst(input)
       -- e.g. 0,1,0 -> 1,0,1
       self._oneMask = self._oneMask or self.zeroMask.new()
       self._oneMask:lt(self.zeroMask, 1)
       -- 1,0,1 -> 1,3
-      self._indices = self._indices or torch.isCudaTensor(input) and torch.CudaLongTensor() or torch.LongTensor()
+      self._indices = self._indices or torch.isCudaTensor(first) and torch.CudaLongTensor() or torch.LongTensor()
       self._range = self._range or self._indices.new()
       self._range:range(1,self._oneMask:nElement())
       self._indices:maskedSelect(self._range, self._oneMask)
@@ -75,10 +76,13 @@ function MaskZeroCriterion:clearState()
    self.output = nil
    self.gradInput = nil
    self._gradInput = nil
+   self.criterion:clearState()
+   return parent.clearState(self)
 end
 
 function MaskZeroCriterion:type(type, ...)
    self:clearState()
+   self.criterion:type(type, ...)
    return parent.type(self, type, ...)
 end
 

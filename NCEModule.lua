@@ -4,19 +4,7 @@
 ------------------------------------------------------------------------
 local _ = require 'moses'
 local NCEModule, parent = torch.class("nn.NCEModule", "nn.Linear")
-NCEModule.version = 6 -- better bias init
-
--- for efficient serialization using nn.Serial
-local empty = _.clone(parent.dpnn_mediumEmpty)
-table.insert(empty, 'sampleidx')
-table.insert(empty, 'sampleprob')
-table.insert(empty, '_noiseidx')
-table.insert(empty, '_noiseprob')
-table.insert(empty, '_weight')
-table.insert(empty, '_gradWeight')
-table.insert(empty, '_gradOutput')
-table.insert(empty, '_tgradOutput')
-NCEModule.dpnn_mediumEmpty = empty
+NCEModule.version = 7 -- remove support for nn.Serial; use clearState()
 
 -- for sharedClone
 local params = _.clone(parent.dpnn_parameters)
@@ -333,44 +321,6 @@ function NCEModule:accGradParameters(inputTable, gradOutput, scale)
    end
 end
 
-function NCEModule:type(type, cache)
-   if type then
-      self.sampleidx = nil
-      self.sampleprob = nil
-      self._noiseidx = nil
-      self._noiseprob = nil
-      self._metaidx = nil
-      self._gradOutput = nil
-      self._tgradOutput = nil
-      self._gradWeight = nil
-      self._weight = nil
-   end
-   local unigrams = self.unigrams
-   self.unigrams = nil
-   local am = self.aliasmultinomial
-
-   local rtn
-   if type and torch.type(self.weight) == 'torch.MultiCudaTensor' then
-      assert(type == 'torch.CudaTensor', "Cannot convert a multicuda NCEModule to anything other than cuda")
-      local weight = self.weight
-      local gradWeight = self.gradWeight
-      self.weight = nil
-      self.gradWeight = nil
-
-      rtn = parent.type(self, type, cache)
-
-      assert(torch.type(self.aliasmultinomial.J) ~= 'torch.CudaTensor')
-      self.weight = weight
-      self.gradWeight = gradWeight
-   else
-      rtn = parent.type(self, type, cache)
-   end
-
-   self.unigrams = unigrams
-   self.aliasmultinomial = am
-   return rtn
-end
-
 function NCEModule:noiseProb(sampleprob, sampleidx)
    assert(sampleprob)
    assert(sampleidx)
@@ -404,6 +354,9 @@ function NCEModule:clearState()
    self._noiseprob = nil
    self._tgradOutput = nil
    self._gradOutput = nil
+   self._gradWeight = nil
+   self._weight = nil
+   self._metaidx = nil
    if torch.isTensor(self.output) then
       self.output:set()
    else
@@ -414,6 +367,36 @@ function NCEModule:clearState()
    for i,gradInput in ipairs(self.gradInput) do
       gradInput:set()
    end
+end
+
+function NCEModule:type(type, cache)
+   if type then
+      self:clearState()
+   end
+   local unigrams = self.unigrams
+   self.unigrams = nil
+   local am = self.aliasmultinomial
+
+   local rtn
+   if type and torch.type(self.weight) == 'torch.MultiCudaTensor' then
+      assert(type == 'torch.CudaTensor', "Cannot convert a multicuda NCEModule to anything other than cuda")
+      local weight = self.weight
+      local gradWeight = self.gradWeight
+      self.weight = nil
+      self.gradWeight = nil
+
+      rtn = parent.type(self, type, cache)
+
+      assert(torch.type(self.aliasmultinomial.J) ~= 'torch.CudaTensor')
+      self.weight = weight
+      self.gradWeight = gradWeight
+   else
+      rtn = parent.type(self, type, cache)
+   end
+
+   self.unigrams = unigrams
+   self.aliasmultinomial = am
+   return rtn
 end
 
 function NCEModule:multicuda(device1, device2)

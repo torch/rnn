@@ -27,7 +27,6 @@ function RecGRU:_updateOutput(input)
    -- output(t) = gru{input(t), output(t-1)}
    local output
    if self.train ~= false then
-      self:recycle()
       local stepmodule = self:getStepModule(self.step)
       output = stepmodule:updateOutput({input, prevOutput})
    else

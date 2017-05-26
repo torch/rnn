@@ -18,9 +18,8 @@ function Sequencer:__init(module)
    end
 
    -- we can decorate the module with a Recursor to make it AbstractRecurrent
-   self.module = (not torch.isTypeOf(module, 'nn.AbstractRecurrent')) and nn.Recursor(module) or module
    -- backprop through time (BPTT) will be done online (in reverse order of forward)
-   self.modules = {self.module}
+   self.modules = {(not torch.isTypeOf(module, 'nn.AbstractRecurrent')) and nn.Recursor(module) or module}
 
    self.output = {}
    self.tableoutput = {}
@@ -28,10 +27,6 @@ function Sequencer:__init(module)
 
    -- table of buffers used for evaluation
    self._output = {}
-   -- so that these buffers aren't serialized :
-   local _ = require 'moses'
-   self.dpnn_mediumEmpty = _.clone(self.dpnn_mediumEmpty)
-   table.insert(self.dpnn_mediumEmpty, '_output')
    -- default is to forget previous inputs before each forward()
    self._remember = 'neither'
 end
@@ -46,16 +41,16 @@ function Sequencer:updateOutput(input)
    end
 
    -- Note that the Sequencer hijacks the seqlen attribute of the rnn
-   self.module:maxBPTTstep(nStep)
+   self.modules[1]:maxBPTTstep(nStep)
    if self.train ~= false then
       -- TRAINING
       if not (self._remember == 'train' or self._remember == 'both') then
-         self.module:forget()
+         self.modules[1]:forget()
       end
 
       self.tableoutput = {}
       for step=1,nStep do
-         self.tableoutput[step] = self.module:updateOutput(input[step])
+         self.tableoutput[step] = self.modules[1]:updateOutput(input[step])
       end
 
       if torch.isTensor(input) then
@@ -70,13 +65,13 @@ function Sequencer:updateOutput(input)
    else
       -- EVALUATION
       if not (self._remember == 'eval' or self._remember == 'both') then
-         self.module:forget()
+         self.modules[1]:forget()
       end
       -- during evaluation, recurrent modules reuse memory (i.e. outputs)
       -- so we need to copy each output into our own table or tensor
       if torch.isTensor(input) then
          for step=1,nStep do
-            local output = self.module:updateOutput(input[step])
+            local output = self.modules[1]:updateOutput(input[step])
             if step == 1 then
                self.output = torch.isTensor(self.output) and self.output or output.new()
                self.output:resize(nStep, unpack(output:size():totable()))
@@ -87,7 +82,7 @@ function Sequencer:updateOutput(input)
          for step=1,nStep do
             self.tableoutput[step] = nn.utils.recursiveCopy(
                self.tableoutput[step] or table.remove(self._output, 1),
-               self.module:updateOutput(input[step])
+               self.modules[1]:updateOutput(input[step])
             )
          end
          -- remove extra output tensors (save for later)
@@ -117,7 +112,7 @@ function Sequencer:updateGradInput(input, gradOutput)
    -- back-propagate through time
    self.tablegradinput = {}
    for step=nStep,1,-1 do
-      self.tablegradinput[step] = self.module:updateGradInput(input[step], gradOutput[step])
+      self.tablegradinput[step] = self.modules[1]:updateGradInput(input[step], gradOutput[step])
    end
 
    if torch.isTensor(input) then
@@ -147,7 +142,7 @@ function Sequencer:accGradParameters(input, gradOutput, scale)
 
    -- back-propagate through time
    for step=nStep,1,-1 do
-      self.module:accGradParameters(input[step], gradOutput[step], scale)
+      self.modules[1]:accGradParameters(input[step], gradOutput[step], scale)
    end
 end
 
@@ -189,7 +184,7 @@ function Sequencer:clearState()
    self._output = {}
    self.tableoutput = {}
    self.tablegradinput = {}
-   self.module:clearState()
+   self.modules[1]:clearState()
 end
 
 Sequencer.__tostring__ = nn.Decorator.__tostring__

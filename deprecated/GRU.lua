@@ -54,12 +54,12 @@ function GRU:buildModel()
                         :add(nn.Dropout(self.p,false,false,true,self.mono))
                         :add(nn.Dropout(self.p,false,false,true,self.mono)))
                      :add(nn.ParallelTable()
-                        :add(nn.LinearNoBias(self.outputSize, self.outputSize))
-                        :add(nn.LinearNoBias(self.outputSize, self.outputSize)))
+                        :add(nn.Linear(self.outputSize, self.outputSize):noBias())
+                        :add(nn.Linear(self.outputSize, self.outputSize):noBias()))
                      :add(nn.JoinTable(2))
    else
       self.i2g = nn.Linear(self.inputSize, 2*self.outputSize)
-      self.o2g = nn.LinearNoBias(self.outputSize, 2*self.outputSize)
+      self.o2g = nn.Linear(self.outputSize, 2*self.outputSize):noBias()
    end
 
    local para = nn.ParallelTable():add(self.i2g):add(self.o2g)
@@ -97,7 +97,7 @@ function GRU:buildModel()
       t2:add(nn.Dropout(self.p,false,false,true,self.mono))
    end
    t1:add(nn.Linear(self.inputSize, self.outputSize))
-   t2:add(nn.LinearNoBias(self.outputSize, self.outputSize))
+   t2:add(nn.Linear(self.outputSize, self.outputSize):noBias())
 
    concat:add(t1):add(t2)
    hidden:add(concat):add(nn.CAddTable()):add(nn.Tanh())
@@ -132,7 +132,6 @@ function GRU:_updateOutput(input)
    -- output(t) = gru{input(t), output(t-1)}
    local output
    if self.train ~= false then
-      self:recycle()
       local stepmodule = self:getStepModule(self.step)
       -- the actual forward propagation
       output = stepmodule:updateOutput{input, prevOutput}

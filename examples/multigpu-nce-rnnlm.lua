@@ -189,8 +189,7 @@ if not xplog then
    xplog.dataset = 'GoogleBillionWords'
    xplog.vocab = trainset.vocab
    -- will only serialize params
-   xplog.model = nn.Serial(lm)
-   xplog.model:mediumSerial()
+   xplog.model = lm:sharedClone()
    xplog.criterion = criterion
    xplog.targetmodule = targetmodule
    -- keep a log of NLL for each epoch

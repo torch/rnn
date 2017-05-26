@@ -282,7 +282,7 @@ function nn.utils.recursiveMaskedCopy(dst, mask, src)
 end
 
 function nn.utils.setZeroMask(modules, zeroMask, cuda)
-   if cuda then
+   if cuda and not torch.isCudaTensor(zeroMask) then
       cuZeroMask = torch.getBuffer('setZeroMask', 'cuZeroMask', 'torch.CudaByteTensor')
       cuZeroMask:resize(zeroMask:size()):copy(zeroMask)
       zeroMask = cuZeroMask
