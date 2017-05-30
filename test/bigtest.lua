@@ -691,7 +691,9 @@ end
 function rnnbigtest.LSTM()
    local seqlen, batchsize = 30, 32
    local inputsize, outputsize = 128, 128
-   local nloop = 20
+   local nloop = 100
+   local ttype = torch.getdefaulttensortype()
+   torch.setdefaulttensortype('torch.FloatTensor')
 
    local lstms = {}
    lstms.fast = nn.Sequencer(nn.FastLSTM(inputsize, outputsize))
@@ -709,31 +711,45 @@ function rnnbigtest.LSTM()
    lstms.seq = nn.SeqLSTM(inputsize, outputsize)
    lstms.luaseq = nn.SeqLSTM(inputsize, outputsize)
    lstms.luaseq.forceLua = true
+   lstms.vseq = nn.VSeqLSTM(inputsize, outputsize)
 
-   local input = torch.Tensor(seqlen, batchsize, inputsize)
-   local gradOutput = torch.Tensor(seqlen, batchsize, outputsize)
+   local input = torch.Tensor(seqlen, batchsize, inputsize):uniform()
+   local gradOutput = torch.Tensor(seqlen, batchsize, outputsize):uniform()
 
    local t = torch.Timer()
 
    print("CPU test")
 
    for name, lstm in pairs(lstms) do
+      local linput,lgradOutput
+      if name == 'vseq' then
+         linput = {torch.Tensor(seqlen*batchsize,inputsize):uniform(), torch.LongTensor(seqlen):fill(batchsize)}
+         lgradOutput = torch.Tensor(seqlen*batchsize,outputsize):uniform()
+      else
+         linput = input
+         lgradOutput = gradOutput
+      end
        -- warmup
       lstm:remember('neither')
-      lstm:forward(input)
-      lstm:zeroGradParameters()
-      lstm:backward(input, gradOutput)
-      -- main test
-      t:reset()
       for i=1,nloop do
-         lstm:forward(input)
+         lstm:forward(linput)
          lstm:zeroGradParameters()
-         lstm:backward(input, gradOutput)
+         lstm:backward(linput, lgradOutput)
       end
-      lstm.testtime = t:time().real/nloop
+      -- main test
+      collectgarbage()
+      t:reset()
+      sys.tic()
+      for i=1,nloop do
+         lstm:forward(linput)
+         lstm:zeroGradParameters()
+         lstm:backward(linput, lgradOutput)
+      end
+      lstm.testtime = sys.toc() / nloop -- t:time().real/nloop
+      collectgarbage()
    end
 
-   for i,name in ipairs{'fast','step','luarec','rec', 'luaseq', 'seq'} do
+   for i,name in ipairs{'fast','step','rec','luarec','luaseq','seq', 'vseq'} do
       print(name..' LSTM time: '..lstms[name].testtime..' seconds')
    end
 
@@ -741,6 +757,7 @@ function rnnbigtest.LSTM()
    print("RecLSTM "..(lstms.fast.testtime/lstms.rec.testtime)..' faster than FastLSTM')
    print("SeqLSTM "..(lstms.rec.testtime/lstms.seq.testtime)..' faster than RecLSTM')
    print("SeqLSTM-C "..(lstms.luaseq.testtime/lstms.seq.testtime)..' faster than SeqLSTM-Lua')
+   print("VSeqLSTM "..(lstms.seq.testtime/lstms.vseq.testtime)..' faster than SeqLSTM-C')
 
    print("Memory test")
 
@@ -750,9 +767,10 @@ function rnnbigtest.LSTM()
       lstm.clearsize = #torch.serialize(lstm)
    end
 
-   for i,name in ipairs{'fast','step','rec','seq'} do
+   for i,name in ipairs{'fast','step','rec','seq','vseq'} do
       print(name..' LSTM memory: '..lstms[name].fullsize/(1024*1024)..':'..lstms[name].clearsize/(1024*1024)..' MB')
    end
+   torch.setdefaulttensortype(ttype)
 end
 
 function rnnbigtest.GRU()
@@ -818,6 +836,118 @@ function rnnbigtest.GRU()
    end
 end
 
+function rnnbigtest.SeqLSTM_vs_VSeqLSTM()
+   local ttype = torch.getdefaulttensortype()
+   torch.setdefaulttensortype("torch.FloatTensor")
+
+   local test = function(timesteps, bsize, embeddingSize, outputSize, ntests, vl_distribution)
+      -- The variable length distribution can be either
+      -- 'dense', 'diagonal' or 'worst-case'
+      local dense = vl_distribution == 'dense'
+      local sizes = torch.LongTensor(timesteps):fill(bsize)
+      if vl_distribution == 'diagonal' then
+         for i=1,timesteps do
+            sizes[i] = math.max(bsize - i + 1,1)
+         end
+      elseif vl_distribution == 'worst-case' then
+         sizes:fill(1)
+         sizes[1] = bsize
+      elseif not dense then
+         error('variable length distribution should either be "dense", "worst-case" or "diagonal"')
+      end
+
+      local input_common = torch.Tensor(timesteps*512*embeddingSize):uniform()
+      local gradOutput_common = torch.Tensor(timesteps*512*outputSize):uniform()
+
+      local input = torch.Tensor(timesteps, bsize, embeddingSize)
+      local mask = torch.ByteTensor(timesteps, bsize):zero()
+      local gradOutput = torch.Tensor(timesteps, bsize, outputSize)
+
+      for i=1,bsize do
+         input[{{},{i,i},{}}]:copy(input_common[{{timesteps*(i-1)*embeddingSize+1,timesteps*i*embeddingSize}}])
+         gradOutput[{{},{i,i},{}}]:copy(gradOutput_common[{{timesteps*(i-1)*outputSize+1,timesteps*i*outputSize}}])
+      end
+      local input_flat = torch.Tensor(sizes:sum(), embeddingSize)
+      local gradOutput_flat = torch.Tensor(sizes:sum(), outputSize)
+
+      local runningIdx = 1
+      for i=1,timesteps do
+         input_flat[{{runningIdx,runningIdx+sizes[i]-1},{}}]:copy(input[{{i,i},{1,sizes[i]},{}}])
+         gradOutput_flat[{{runningIdx,runningIdx+sizes[i]-1},{}}]:copy(gradOutput[{{i,i},{1,sizes[i]},{}}])
+         if sizes[i] < bsize then
+            mask[{{i,i},{sizes[i]+1,bsize}}]:fill(1)
+         end
+         runningIdx = runningIdx + sizes[i]
+      end
+      local seqLSTM = nn.SeqLSTM(embeddingSize, outputSize)
+      if not dense then
+         seqLSTM:maskZero()
+      end
+      seqLSTM:remember('neither')
+
+      local vseqLSTM = nn.VSeqLSTM(embeddingSize, outputSize)
+      vseqLSTM.weight = seqLSTM.weight
+      vseqLSTM.gradWeight = seqLSTM.gradWeight
+      vseqLSTM.gradBias = seqLSTM.gradBias
+      vseqLSTM.bias = seqLSTM.bias
+
+      local output, gradInput
+      sys.tic()
+      for i=1,ntests do
+         if not dense then
+            seqLSTM:setZeroMask(mask)
+         end
+         output = seqLSTM:forward(input)
+         gradInput = seqLSTM:backward(input, gradOutput)
+      end
+      local seqLSTMDuration = sys.toc()
+
+      local output_flat, gradInput_flat
+      local vinput = {input_flat, sizes}
+      sys.tic()
+      for i=1,ntests do
+         output_flat = vseqLSTM:forward(vinput)
+         gradInput_flat = vseqLSTM:backward(vinput, gradOutput_flat)
+      end
+      local vseqLSTMDuration = sys.toc()
+
+      print('')
+      print('Results:')
+      print('\t- sequence length: ' .. timesteps)
+      print('\t- batch size: ' .. bsize)
+      print('\t- embeddingSize: ' .. embeddingSize)
+      print('\t- outputSize: ' .. outputSize)
+      print('\t- variable length distribution: ' .. vl_distribution)
+      print('\t- SPEEDUP: ' .. (seqLSTMDuration/vseqLSTMDuration))
+   end
+
+   local timesteps = 30
+   local bsize = 30
+   local embeddingSize = 128
+   local outputSize = 128
+   local ntests = 100
+   test(timesteps, bsize, embeddingSize, outputSize, ntests, "dense")
+   test(timesteps, bsize, embeddingSize, outputSize, ntests, "diagonal")
+   test(timesteps, bsize, embeddingSize, outputSize, ntests, "worst-case")
+
+   local timesteps = 16
+   local bsize = 16
+   local embeddingSize = 200
+   local outputSize = 400
+   local ntests = 100
+   test(timesteps, bsize, embeddingSize, outputSize, ntests, "dense")
+   test(timesteps, bsize, embeddingSize, outputSize, ntests, "diagonal")
+   test(timesteps, bsize, embeddingSize, outputSize, ntests, "worst-case")
+
+   local timesteps = 50
+   local bsize = 1
+   local embeddingSize = 128
+   local outputSize = 128
+   local ntests = 100
+   test(timesteps, bsize, embeddingSize, outputSize, ntests, "dense")
+
+   torch.setdefaulttensortype(ttype)
+end
 
 function rnn.bigtest(tests)
    mytester = torch.Tester()

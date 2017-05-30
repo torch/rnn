@@ -2828,6 +2828,110 @@ function rnntest.SeqLSTM_Lua_vs_C()
    end
 end
 
+function rnntest.SeqLSTM_vs_VSeqLSTM()
+   local ttype = torch.getdefaulttensortype()
+   torch.setdefaulttensortype("torch.DoubleTensor")
+
+   local test = function(timesteps, bsize, embeddingSize, outputSize, ntests, vl_distribution)
+      -- The variable length distribution can be either
+      -- 'dense', 'diagonal' or 'worst-case'
+      local sizes = torch.LongTensor(timesteps):fill(bsize)
+      if vl_distribution == 'diagonal' then
+         for i=1,timesteps do
+            sizes[i] = math.max(bsize - i + 1,1)
+         end
+      elseif vl_distribution == 'worst-case' then
+         sizes:fill(1)
+         sizes[1] = bsize
+      elseif vl_distribution ~= 'dense' then
+         error('variable length distribution should either be "dense", "worst-case" or "diagonal"')
+      end
+
+      local input_common = torch.Tensor(timesteps*512*embeddingSize):uniform()
+      local gradOutput_common = torch.Tensor(timesteps*512*outputSize):uniform()
+
+      local input = torch.Tensor(timesteps, bsize, embeddingSize):zero()
+      local mask = torch.ByteTensor(timesteps, bsize):zero()
+      local gradOutput = torch.Tensor(timesteps, bsize, outputSize):zero()
+
+      for i=1,bsize do
+         input[{{},{i,i},{}}]:copy(input_common[{{timesteps*(i-1)*embeddingSize+1,timesteps*i*embeddingSize}}])
+         gradOutput[{{},{i,i},{}}]:copy(gradOutput_common[{{timesteps*(i-1)*outputSize+1,timesteps*i*outputSize}}])
+      end
+      local input_flat = torch.Tensor(sizes:sum(), embeddingSize):zero()
+      local gradOutput_flat = torch.Tensor(sizes:sum(), outputSize):zero()
+
+      local runningIdx = 1
+      for i=1,timesteps do
+         input_flat[{{runningIdx,runningIdx+sizes[i]-1},{}}]:copy(input[{{i,i},{1,sizes[i]},{}}])
+         gradOutput_flat[{{runningIdx,runningIdx+sizes[i]-1},{}}]:copy(gradOutput[{{i,i},{1,sizes[i]},{}}])
+         if sizes[i] < bsize then
+            mask[{{i,i},{sizes[i]+1,bsize}}]:fill(1)
+         end
+         runningIdx = runningIdx + sizes[i]
+      end
+      local seqLSTM = nn.SeqLSTM(embeddingSize, outputSize)
+      seqLSTM:maskZero()
+      seqLSTM:remember('neither')
+      seqLSTM:reset()
+
+      local vseqLSTM = nn.VSeqLSTM(embeddingSize, outputSize)
+      vseqLSTM.weight:copy(seqLSTM.weight)
+      vseqLSTM.gradWeight:copy(seqLSTM.gradWeight:zero())
+      vseqLSTM.gradBias:copy(seqLSTM.gradBias:zero())
+      vseqLSTM.bias:copy(seqLSTM.bias)
+
+      local output, gradInput
+      sys.tic()
+      for i=1,ntests do
+         seqLSTM:setZeroMask(mask)
+         output = seqLSTM:forward(input)
+         gradInput = seqLSTM:backward(input, gradOutput)
+      end
+      local seqLSTMDuration = sys.toc()
+
+      local output_flat, gradInput_flat
+      local vinput = {input_flat, sizes}
+      sys.tic()
+      for i=1,ntests do
+         output_flat = vseqLSTM:forward(vinput)
+         gradInput_flat = vseqLSTM:backward(vinput, gradOutput_flat)
+      end
+      local vseqLSTMDuration = sys.toc()
+      local runningIdx = 1
+      for i=1,timesteps do
+         local lout = torch.view(output[{{i,i},{1,sizes[i]},{}}], output[{{i,i},{1,sizes[i]},{}}]:nElement())
+         local lout_flat = torch.view(output_flat[{{runningIdx,runningIdx+sizes[i]-1},{}}], output_flat[{{runningIdx,runningIdx+sizes[i]-1},{}}]:nElement())
+         mytester:assertTensorEq(lout, lout_flat, 0.00001)
+         runningIdx = runningIdx + sizes[i]
+      end
+
+      runningIdx = 1
+      for i=1,timesteps do
+         local lgi = torch.view(gradInput[{{i,i},{1,sizes[i]},{}}], gradInput[{{i,i},{1,sizes[i]},{}}]:nElement())
+         local lgi_flat = torch.view(gradInput_flat[{{runningIdx,runningIdx+sizes[i]-1},{}}], gradInput_flat[{{runningIdx,runningIdx+sizes[i]-1},{}}]:nElement())
+         mytester:assertTensorEq(lgi, lgi_flat, 0.00001)
+         runningIdx = runningIdx + sizes[i]
+      end
+      local params, gradParams = seqLSTM:parameters()
+      local params2, gradParams2 = vseqLSTM:parameters()
+      for i=1,#params2 do
+         mytester:assertTensorEq(gradParams[i], gradParams2[i], 0.00001)
+      end
+   end
+
+   local timesteps = 30
+   local bsize = 30
+   local embeddingSize = 4
+   local outputSize = 5
+   local ntests = 1
+   test(timesteps, bsize, embeddingSize, outputSize, ntests, "dense")
+   test(timesteps, bsize, embeddingSize, outputSize, ntests, "diagonal")
+   test(timesteps, bsize, embeddingSize, outputSize, ntests, "worst-case")
+
+   torch.setdefaulttensortype(ttype)
+end
+
 function rnntest.SeqLSTM_maskzero()
    -- tests that it works with non-masked inputs regardless of maskzero's value.
    -- Note that more maskzero = true tests with masked inputs are in SeqLSTM unit test.
@@ -3954,13 +4058,17 @@ function rnntest.VariableLength_lstm()
       -- VL(LSTM): test forward
 
       local input = {}
-      local lstm, vl, input2, output
+      local lstm, vlstm, vl, vvl, input2, output
       if not testLM then
          for i=1,batchSize do
-            input[i] = torch.randn(torch.random(1,maxLength), hiddenSize)
+            input[i] = torch.randn(i,hiddenSize)--torch.random(1,maxLength), hiddenSize)
          end
 
          lstm = nn.SeqLSTM(hiddenSize, hiddenSize):maskZero()
+
+         vlstm = nn.VSeqLSTM(hiddenSize, hiddenSize)
+         vlstm.weight:copy(lstm.weight)
+         vlstm.bias:copy(lstm.bias)
 
          input2 = torch.Tensor(maxLength, batchSize, hiddenSize):zero()
       else
@@ -3972,19 +4080,39 @@ function rnntest.VariableLength_lstm()
             :add(nn.LookupTableMaskZero(nIndex, hiddenSize))
             :add(nn.SeqLSTM(hiddenSize, hiddenSize):maskZero())
 
+         vlstm = nn.Sequential()
+            :add(nn.LookupTableMaskZero(nIndex, hiddenSize))
+            :add(nn.VSeqLSTM(hiddenSize, hiddenSize))
+
+         local p = lstm:parameters()
+         local vp = vlstm:parameters()
+         for i=1,#vp do
+            vp[i]:copy(p[i])
+         end
+
          input2 = torch.Tensor(maxLength, batchSize):zero()
       end
 
+      vll = nn.VariableLength(vlstm:clone(), lastOnly, true)
       vl = nn.VariableLength(lstm:clone(), lastOnly)
 
       local output = vl:forward(input)
+      local voutput = vll:forward(input)
 
       for i=1,batchSize do
          local seqlen = input[i]:size(1)
          input2:select(2,i):narrow(1,maxLength-seqlen+1,seqlen):copy(input[i])
       end
-
       lstm:setZeroMask(nn.utils.getZeroMaskSequence(input2))
+
+      if not lastOnly then
+         for i=1,batchSize do
+            mytester:assertTensorEq(output[i], voutput[i], 0.000001)
+         end
+      else
+         mytester:assertTensorEq(output, voutput, 0.000001)
+      end
+
       local output2 = lstm:forward(input2)
 
       if not lastOnly then
@@ -4021,9 +4149,20 @@ function rnntest.VariableLength_lstm()
 
       vl:zeroGradParameters()
       local gradInput = vl:backward(input, gradOutput)
+      vll:zeroGradParameters()
+      local vgradInput = vll:backward(input, gradOutput)
+
+
+      for i=1,batchSize do
+         mytester:assertTensorEq(gradInput[i], vgradInput[i], 0.000001)
+      end
 
       for i=1,batchSize do
          mytester:assert(input[i]:isSameSizeAs(gradInput[i]))
+      end
+
+      for i=1,batchSize do
+         mytester:assert(input[i]:isSameSizeAs(vgradInput[i]))
       end
 
       lstm:zeroGradParameters()

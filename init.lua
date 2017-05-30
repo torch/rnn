@@ -17,6 +17,7 @@ function nn.require(packagename)
    end
 end
 
+require('rnn.THRNN')
 
 -- c lib:
 require "paths"
@@ -93,6 +94,7 @@ require('rnn.RecurrentAttention')
 
 -- sequencer + recurrent modules
 require('rnn.SeqLSTM')
+require('rnn.VSeqLSTM')
 require('rnn.SeqGRU')
 require('rnn.SeqBLSTM')
 require('rnn.SeqBGRU')

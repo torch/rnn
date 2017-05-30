@@ -38,6 +38,15 @@ function Module:setZeroMask(zeroMask)
    end
 end
 
+function Module:setContext(context)
+   if self.modules then
+      for i, module in ipairs(self.modules) do
+         module:setContext(context)
+      end
+   end
+   self.__context = context
+end
+
 function Module:stepClone(shareParams, shareGradParams)
    return self:sharedClone(shareParams, shareGradParams, true)
 end
