@@ -5,12 +5,20 @@ CMAKE_POLICY(VERSION 2.6)
 
 FIND_PACKAGE(Torch REQUIRED)
 
+ADD_SUBDIRECTORY(lib)
+
 SET(BUILD_STATIC YES) # makes sure static targets are enabled in ADD_TORCH_PACKAGE
 
 SET(CMAKE_C_FLAGS "--std=c99 -pedantic -Werror -Wall -Wextra -Wno-unused-function -D_GNU_SOURCE ${CMAKE_C_FLAGS}")
 SET(src
    init.c
 )
+
+FILE(STRINGS lib/THRNN/generic/THRNN.h THRNN_headers NEWLINE_CONSUME)
+FILE(WRITE THRNN_h.lua "return [[")
+FILE(APPEND THRNN_h.lua ${THRNN_headers})
+FILE(APPEND THRNN_h.lua "]]")
+
 SET(luasrc
   init.lua
   AbstractRecurrent.lua
@@ -75,6 +83,8 @@ SET(luasrc
   deprecated/FastLSTM.lua
   deprecated/GRU.lua
   deprecated/LSTM.lua
+  THRNN.lua
+  THRNN_h.lua
 )
 
 ADD_TORCH_PACKAGE(rnn "${src}" "${luasrc}" "An RNN library for Torch")

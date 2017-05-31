@@ -17,6 +17,7 @@ function nn.require(packagename)
    end
 end
 
+require('rnn.THRNN')
 
 -- c lib:
 require "paths"
