@@ -1,10 +1,6 @@
 #include "luaT.h"
 #include "TH.h"
 
-#ifdef _OPENMP
-#include "omp.h"
-#endif
-
 #include "error.h"
 #include "utils.h"
 #include <stdlib.h>
@@ -55,28 +51,12 @@ static long get_n_samples(lua_State *L, int lengths_index) {
   return count;
 }
 
-#define torch_(NAME) TH_CONCAT_3(torch_, Real, NAME)
-#define torch_Tensor TH_CONCAT_STRING_3(torch., Real, Tensor)
-#define nn_(NAME) TH_CONCAT_3(nn_, Real, NAME)
-
-#include "generic/VariableLength.c"
-#include "THGenerateFloatTypes.h"
-
-#include "generic/StepLSTM.c"
-#include "THGenerateFloatTypes.h"
-
-#include "generic/StepGRU.c"
-#include "THGenerateFloatTypes.h"
-
-DLL_EXPORT int luaopen_librnn(lua_State *L)
-{
-  nn_FloatVariableLength_init(L);
-  nn_FloatStepLSTM_init(L);
-  nn_FloatStepGRU_init(L);
-
-  nn_DoubleVariableLength_init(L);
-  nn_DoubleStepLSTM_init(L);
-  nn_DoubleStepGRU_init(L);
-
-  return 1;
+#if defined(USE_CUDA)
+#if defined(__cplusplus)
+extern "C" {
+#endif
+int cuda_librnn_init(lua_State *L);
+#if defined(__cplusplus)
 }
+#endif
+#endif

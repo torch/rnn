@@ -1500,7 +1500,7 @@ function rnntest.SequencerCriterion()
    local gradInputTable = sc:backward(split:forward(input), split:forward(target))
    mytester:assertTensorEq(gradInputTensor, torch.cat(gradInputTable, 1):view(gradInputTensor:size()), 0, "SequencerCriterion backward type err ")
 
-   if pcall(function() require 'cunn' end) then
+   if rnn.cuda then
       -- test cuda()
       sc.gradInput = {}
       sc:cuda()
@@ -2107,7 +2107,7 @@ function rnntest.MaskZeroCriterion()
       mytester:assert(math.abs(err3 - err) < 0.0000001, "MaskZeroCriterion cast fwd err")
       mytester:assertTensorEq(gradInput3, gradInput:float(), 0.0000001, "MaskZeroCriterion cast bwd err")
 
-      if pcall(function() require 'cunn' end) then
+      if rnn.cuda then
          -- test cuda
          mznll:cuda()
          if v2 then
@@ -2828,6 +2828,49 @@ function rnntest.SeqLSTM_Lua_vs_C()
    end
 end
 
+function rnntest.SeqLSTM_cuda()
+   if not rnn.cuda then
+      return
+   end
+
+   local ty = torch.getdefaulttensortype()
+   torch.setdefaulttensortype('torch.FloatTensor')
+
+   local seqlen, batchsize = 3, 4
+   local inputsize, outputsize = 2, 5
+
+   local input = torch.randn(seqlen, batchsize, inputsize)
+
+   local seqlstm = nn.SeqLSTM(inputsize, outputsize)
+   local seqlstmCuda = nn.SeqLSTM(inputsize, outputsize)
+   seqlstmCuda.weight:copy(seqlstm.weight)
+   seqlstmCuda.bias:copy(seqlstm.bias)
+   seqlstmCuda:cuda()
+
+   local output = seqlstm:forward(input)
+   local outputCuda = seqlstmCuda:forward(input:cuda())
+   mytester:assertTensorEq(output, outputCuda:float(), precision)
+
+   seqlstm:zeroGradParameters()
+   seqlstmCuda:zeroGradParameters()
+
+   local gradOutput = torch.randn(seqlen, batchsize, outputsize)
+
+   local gradInput = seqlstm:backward(input, gradOutput)
+   local gradInputCuda = seqlstmCuda:backward(input:cuda(), gradOutput:cuda())
+
+   mytester:assertTensorEq(gradInput, gradInputCuda:float(), precision)
+
+   local params, gradParams = seqlstm:parameters()
+   local paramsCuda, gradParamsCuda = seqlstmCuda:parameters()
+
+   for i=1,#paramsCuda do
+      mytester:assertTensorEq(gradParams[i], gradParamsCuda[i]:float(), precision)
+   end
+
+   torch.setdefaulttensortype(ty)
+end
+
 function rnntest.SeqLSTM_maskzero()
    -- tests that it works with non-masked inputs regardless of maskzero's value.
    -- Note that more maskzero = true tests with masked inputs are in SeqLSTM unit test.
@@ -2858,7 +2901,7 @@ function rnntest.SeqLSTM_maskzero()
    mytester:assertTensorEq(gradParams, gradParams2, 0.000001)
    if benchmark then
       local T, N, D, H = 20, 20, 50, 50
-      if pcall(function() require 'cunn' end) then
+      if rnn.cuda then
          T, N, D, H = 100, 128, 250, 250
       end
 
@@ -3603,7 +3646,7 @@ function rnntest.SeqGRU_maskzero()
    mytester:assertTensorEq(gradParams, gradParams2, 0.000001)
    if benchmark then
       local T, N, D, H = 20, 20, 50, 50
-      if pcall(function() require 'cunn' end) then
+      if rnn.cuda then
          T, N, D, H = 100, 128, 250, 250
       end
 
@@ -3680,6 +3723,49 @@ function rnntest.SeqGRU_Lua_vs_C()
    for i=1,#params2 do
       mytester:assertTensorEq(gradParams[i], gradParams2[i], 0.0000001)
    end
+end
+
+function rnntest.SeqGRU_cuda()
+   if not rnn.cuda then
+      return
+   end
+
+   local ty = torch.getdefaulttensortype()
+   torch.setdefaulttensortype('torch.FloatTensor')
+
+   local seqlen, batchsize = 3, 4
+   local inputsize, outputsize = 2, 5
+
+   local input = torch.randn(seqlen, batchsize, inputsize)
+
+   local seqgru = nn.SeqGRU(inputsize, outputsize)
+   local seqgruCuda = nn.SeqGRU(inputsize, outputsize)
+   seqgruCuda.weight:copy(seqgru.weight)
+   seqgruCuda.bias:copy(seqgru.bias)
+   seqgruCuda:cuda()
+
+   local output = seqgru:forward(input)
+   local outputCuda = seqgruCuda:forward(input:cuda())
+   mytester:assertTensorEq(output, outputCuda:float(), precision)
+
+   seqgru:zeroGradParameters()
+   seqgruCuda:zeroGradParameters()
+
+   local gradOutput = torch.randn(seqlen, batchsize, outputsize)
+
+   local gradInput = seqgru:backward(input, gradOutput)
+   local gradInputCuda = seqgruCuda:backward(input:cuda(), gradOutput:cuda())
+
+   mytester:assertTensorEq(gradInput, gradInputCuda:float(), precision)
+
+   local params, gradParams = seqgru:parameters()
+   local paramsCuda, gradParamsCuda = seqgruCuda:parameters()
+
+   for i=1,#paramsCuda do
+      mytester:assertTensorEq(gradParams[i], gradParamsCuda[i]:float(), precision)
+   end
+
+   torch.setdefaulttensortype(ty)
 end
 
 function checkgrad(opfunc, x, eps)
@@ -3865,6 +3951,51 @@ function rnntest.VariableLength_FromSamples()
    end
 end
 
+function rnntest.VariableLength_FromSamples_cuda()
+   if not rnn.cuda then
+      return
+   end
+
+   torch.manualSeed(0)
+   local nSamples = 10
+   local maxLength = 20
+   for run=1,10 do
+      local lengths = torch.LongTensor(nSamples)
+      lengths:random(maxLength)
+      local samples = {}
+      for i=1,nSamples do
+         local t = torch.rand(lengths[i], 5)
+         samples[i] = t:cuda()
+      end
+      local output = torch.CudaTensor()
+      local mask = torch.CudaByteTensor()
+      local indexes, mappedLengths = output.nn.VariableLength_FromSamples(samples, output, mask)
+
+      output = output:float()
+      mask = mask:byte()
+      for i, ids in ipairs(indexes) do
+         local m = mask:select(2, i)
+         local t = output:select(2, i)
+         for j, sampleId in ipairs(ids) do
+            local l = lengths[sampleId]
+            -- check that the length was mapped correctly
+            mytester:assert(l == mappedLengths[i][j])
+            -- checks that the mask is 0 for valid entries
+            mytester:assert(math.abs(m:narrow(1, 1, l):sum()) < 0.000001)
+            -- checks that the valid entries are equal
+            mytester:assertTensorEq(t:narrow(1, 1, l), samples[sampleId]:float())
+            if l < m:size(1) then
+               mytester:assert(m[l+1] == 1)
+            end
+            if l+1 < m:size(1) then
+               m = m:narrow(1, l+2, m:size(1)-l-1)
+               t = t:narrow(1, l+2, t:size(1)-l-1)
+            end
+         end
+      end
+   end
+end
+
 function rnntest.VariableLength_ToSamples()
    local nSamples = 10
    local maxLength = 20
@@ -3882,6 +4013,30 @@ function rnntest.VariableLength_ToSamples()
       mytester:assert(#samples == #new_samples)
       for i=1,nSamples do
          mytester:assertTensorEq(samples[i], new_samples[i])
+      end
+   end
+end
+
+function rnntest.VariableLength_ToSamples_cuda()
+   if not rnn.cuda then
+      return
+   end
+   local nSamples = 10
+   local maxLength = 20
+   for run=1,10 do
+      local lengths = torch.LongTensor(nSamples)
+      lengths:random(maxLength)
+      local samples = {}
+      for i=1,nSamples do
+         samples[i] = torch.rand(lengths[i], 5):cuda()
+      end
+      local output = torch.CudaTensor()
+      local mask = torch.CudaByteTensor()
+      local indexes, mappedLengths = output.nn.VariableLength_FromSamples(samples, output, mask)
+      local new_samples = output.nn.VariableLength_ToSamples(indexes, mappedLengths, output)
+      mytester:assert(#samples == #new_samples)
+      for i=1,nSamples do
+         mytester:assertTensorEq(samples[i]:float(), new_samples[i]:float())
       end
    end
 end
@@ -3906,6 +4061,30 @@ function rnntest.VariableLength_ToFinal()
 
       for i=1,nSamples do
          mytester:assertTensorEq(samples[i]:select(1, lengths[i]), final:select(1, i))
+      end
+   end
+end
+
+function rnntest.VariableLength_ToFinal_cuda()
+   local nSamples = 10
+   local maxLength = 20
+   for run=1,10 do
+      local lengths = torch.LongTensor(nSamples)
+      lengths:random(maxLength)
+      local samples = {}
+      for i=1,nSamples do
+         local t = torch.rand(lengths[i], 5):cuda()
+         samples[i] = t
+      end
+      local output = torch.CudaTensor()
+      local mask = torch.CudaByteTensor()
+      local indexes, mappedLengths = output.nn.VariableLength_FromSamples(samples, output, mask)
+
+      local final = torch.CudaTensor()
+      output.nn.VariableLength_ToFinal(indexes, mappedLengths, output, final)
+
+      for i=1,nSamples do
+         mytester:assertTensorEq(samples[i]:select(1, lengths[i]):float(), final:select(1, i):float())
       end
    end
 end
@@ -3939,6 +4118,39 @@ function rnntest.VariableLength_FromFinal()
             mytester:assert(new_samples[i]:narrow(1, 1, lengths[i]-1):abs():sum() < 0.000001)
          end
          mytester:assertTensorEq(samples[i]:select(1, lengths[i]), new_samples[i]:select(1, lengths[i]))
+      end
+   end
+end
+
+function rnntest.VariableLength_FromFinal_cuda()
+   torch.manualSeed(2)
+   local nSamples = 10
+   local maxLength = 20
+   for run=1,1 do
+      local lengths = torch.LongTensor(nSamples)
+      lengths:random(maxLength)
+      local samples = {}
+      for i=1,nSamples do
+         local t = torch.rand(lengths[i], 5):cuda()
+         samples[i] = t
+      end
+      local output = torch.CudaTensor()
+      local mask = torch.CudaByteTensor()
+      local indexes, mappedLengths = output.nn.VariableLength_FromSamples(samples, output, mask)
+
+      local final = torch.CudaTensor()
+      output.nn.VariableLength_ToFinal(indexes, mappedLengths, output, final)
+
+      local re_output = torch.CudaTensor()
+      output.nn.VariableLength_FromFinal(indexes, mappedLengths, final, re_output)
+
+      local new_samples = output.nn.VariableLength_ToSamples(indexes, mappedLengths, re_output)
+
+      for i=1,nSamples do
+         if lengths[i] > 1 then
+            mytester:assert(new_samples[i]:narrow(1, 1, lengths[i]-1):abs():sum() < 0.000001)
+         end
+         mytester:assertTensorEq(samples[i]:select(1, lengths[i]):float(), new_samples[i]:select(1, lengths[i]):float())
       end
    end
 end
@@ -4987,7 +5199,7 @@ function rnntest.VRClassReward()
    mytester:assertTensorEq(gradInput[2], gradInput2, 0.000001, "VRClassReward backward baseline err")
    mytester:assert(math.abs(gradInput[1]:sum()) < 0.000001, "VRClassReward backward class err")
 
-   if pcall(function() require 'cunn' end) then
+   if rnn.cuda then
       local gradInput = {gradInput[1], gradInput[2]}
       input[1], input[2] = input[1]:cuda(), input[2]:cuda()
       target = target:cuda()
@@ -5859,7 +6071,7 @@ function rnntest.NCE_main()
    end
 
 
-   if pcall(function() require 'cunn' end) then
+   if rnn.cuda then
       -- test training with cuda
 
       ncem:cuda()
@@ -6082,7 +6294,7 @@ function rnntest.NCE_batchnoise()
    end
 
 
-   if pcall(function() require 'cunn' end) then
+   if rnn.cuda then
       -- test training with cuda
 
       ncem:cuda()
@@ -6168,7 +6380,7 @@ function rnntest.NCE_multicuda()
    if not pcall(function() require 'torchx' end) then
       return
    end
-   if not pcall(function() require 'cunn' end) then
+   if not rnn.cuda then
       return
    end
    if cutorch.getDeviceCount() < 2 then
