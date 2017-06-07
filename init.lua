@@ -1,10 +1,11 @@
 require 'torchx'
 local _ = require 'moses'
 require 'nn'
-pcall(require, 'cunn')
+local _cuda, _ = pcall(require, 'cunn')
 
 -- create global rnn table:
 rnn = {}
+rnn.cuda = _cuda
 rnn.version = 2.7 -- better support for bidirection RNNs
 
 -- lua 5.2 compat
