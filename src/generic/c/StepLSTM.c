@@ -1,5 +1,5 @@
 #ifndef TH_GENERIC_FILE
-#define TH_GENERIC_FILE "generic/StepLSTM.c"
+#define TH_GENERIC_FILE "generic/c/StepLSTM.c"
 #else
 
 static int nn_(StepLSTM_updateOutput)(lua_State *L) {
