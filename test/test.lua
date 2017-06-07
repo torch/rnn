@@ -4066,6 +4066,9 @@ function rnntest.VariableLength_ToFinal()
 end
 
 function rnntest.VariableLength_ToFinal_cuda()
+   if not rnn.cuda then
+      return
+   end
    local nSamples = 10
    local maxLength = 20
    for run=1,10 do
@@ -4123,6 +4126,9 @@ function rnntest.VariableLength_FromFinal()
 end
 
 function rnntest.VariableLength_FromFinal_cuda()
+   if not rnn.cuda then
+      return
+   end
    torch.manualSeed(2)
    local nSamples = 10
    local maxLength = 20
