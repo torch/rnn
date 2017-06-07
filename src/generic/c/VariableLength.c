@@ -1,5 +1,5 @@
 #ifndef TH_GENERIC_FILE
-#define TH_GENERIC_FILE "generic/VariableLength.c"
+#define TH_GENERIC_FILE "generic/c/VariableLength.c"
 #else
 
 static int nn_(from_samples_to_structured)(lua_State *L) {

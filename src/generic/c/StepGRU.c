@@ -1,5 +1,5 @@
 #ifndef TH_GENERIC_FILE
-#define TH_GENERIC_FILE "generic/StepGRU.c"
+#define TH_GENERIC_FILE "generic/c/StepGRU.c"
 #else
 
 static int nn_(StepGRU_updateOutput)(lua_State *L) {

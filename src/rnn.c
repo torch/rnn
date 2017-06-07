@@ -8,13 +8,13 @@
 #define torch_Tensor TH_CONCAT_STRING_3(torch., Real, Tensor)
 #define nn_(NAME) TH_CONCAT_3(nn_, Real, NAME)
 
-#include "generic/VariableLength.c"
+#include "generic/c/VariableLength.c"
 #include "THGenerateFloatTypes.h"
 
-#include "generic/StepLSTM.c"
+#include "generic/c/StepLSTM.c"
 #include "THGenerateFloatTypes.h"
 
-#include "generic/StepGRU.c"
+#include "generic/c/StepGRU.c"
 #include "THGenerateFloatTypes.h"
 
 DLL_EXPORT int luaopen_librnn(lua_State *L)
