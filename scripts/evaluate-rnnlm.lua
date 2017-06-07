@@ -1,5 +1,6 @@
 require 'nngraph'
 require 'rnn'
+require 'optim'
 local dl = require 'dataload'
 
 

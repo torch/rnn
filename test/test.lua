@@ -4348,8 +4348,8 @@ function rnntest.RecLSTM_maskzero()
    seqlstm2.bias:copy(reclstm.modules[1].bias)
 
    local input = torch.randn(T, N, D)
-   input[{2,1}]:fill(0)
-   input[{3,2}]:fill(0)
+   --input[{2,1}]:fill(0)
+   --input[{3,2}]:fill(0)
    local gradOutput = torch.randn(T, N, H)
 
    local zeroMask = torch.ByteTensor(T, N):zero()

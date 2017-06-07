@@ -229,6 +229,12 @@ function AbstractRecurrent:evaluate()
    end)
 end
 
+function AbstractRecurrent:apply(callback)
+   for k,stepmodule in pairs(self.sharedClones) do
+      stepmodule:apply(callback)
+   end
+end
+
 function AbstractRecurrent:reinforce(reward)
    local a = torch.Timer()
    if torch.type(reward) == 'table' then
