@@ -219,7 +219,6 @@ else
       local outputs = lm:forward(inputs)
       if opt.bleu then
          max_ind = torch.multinomial(torch.exp(outputs:view(targets:nElement(), -1)), 1):view(targets:size(1),targets:size(2))
-         --max_ind = torch.multinomial(torch.exp(outputs:view(targets:size(1)*targets:size(2), -1)), 1):view(targets:size(1),targets:size(2))
             for batchIdx=1, targets:size(2) do
                sum_bleu = sum_bleu + get_bleu(max_ind:select(2, batchIdx),
                                               targets:select(2, batchIdx),
