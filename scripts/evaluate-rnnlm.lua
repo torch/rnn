@@ -43,14 +43,13 @@ local validerr = xplog.valnceloss or xplog.valppl
 print(string.format("Error (epoch=%d): training=%f; validation=%f", xplog.epoch, trainerr[#trainerr], validerr[#validerr]))
 
 
-local function get_ngrams(s, n, count)
+local function get_ngrams(sent, n, count)
    local ngrams = {}
-   count = count or 0
-   for beg = 1, #s do
-      for  last= beg, math.min(beg+n-1, #s) do
-         local ngram = table.concat(s, ' ', beg, last)
+   for beg = 1, #sent do
+      for  last= beg, math.min(beg+n-1, #sent) do
+         local ngram = table.concat(sent, ' ', beg, last)
          local len = last-beg+1 -- keep track of ngram length
-         if count == 0 then
+         if not count then
             table.insert(ngrams, ngram)
          else
             if ngrams[ngram] == nil then
@@ -88,7 +87,7 @@ end
 
 function get_bleu(cand, ref, n)
    n = n or 4
-   local m = 1
+   local smooth = 1
    if type(cand) ~= 'table' then
       cand = cand:totable()
    end
@@ -103,8 +102,8 @@ function get_bleu(cand, ref, n)
    for i = 1, n do
       if res[i][1] > 0 then
          if res[i][2] == 0 then
-            m = m*0.5
-            res[i][2] = m
+            smooth = smooth*0.5
+            res[i][2] = smooth
          end
          local prec = res[i][2]/res[i][1]
          bleu = bleu * prec
@@ -219,8 +218,8 @@ else
       local inputs = opt.nce and {inputs, targets} or inputs
       local outputs = lm:forward(inputs)
       if opt.bleu then
-            max_ind = torch.multinomial(torch.exp(outputs:view(targets:size(1)*targets:size(2), -1)), 1):view(targets:size(1),targets:size(2))
-            --max_ind = targets
+         max_ind = torch.multinomial(torch.exp(outputs:view(targets:nElement(), -1)), 1):view(targets:size(1),targets:size(2))
+         --max_ind = torch.multinomial(torch.exp(outputs:view(targets:size(1)*targets:size(2), -1)), 1):view(targets:size(1),targets:size(2))
             for batchIdx=1, targets:size(2) do
                sum_bleu = sum_bleu + get_bleu(max_ind:select(2, batchIdx),
                                               targets:select(2, batchIdx),
