@@ -46,43 +46,42 @@ print(string.format("Error (epoch=%d): training=%f; validation=%f", xplog.epoch,
 local function get_ngrams(s, n, count)
    local ngrams = {}
    count = count or 0
-   for i = 1, #s do
-      for j = i, math.min(i+n-1, #s) do
-    local ngram = table.concat(s, ' ', i, j)
-    local l = j-i+1 -- keep track of ngram length
-    if count == 0 then
-       table.insert(ngrams, ngram)
-    else
-       if ngrams[ngram] == nil then
-          ngrams[ngram] = {1, l}
-       else
-          ngrams[ngram][1] = ngrams[ngram][1] + 1
-       end
-    end
+   for beg = 1, #s do
+      for  last= beg, math.min(beg+n-1, #s) do
+         local ngram = table.concat(s, ' ', beg, last)
+         local len = last-beg+1 -- keep track of ngram length
+         if count == 0 then
+            table.insert(ngrams, ngram)
+         else
+            if ngrams[ngram] == nil then
+               ngrams[ngram] = {1, len}
+            else
+               ngrams[ngram][1] = ngrams[ngram][1] + 1
+            end
+         end
       end
    end
    return ngrams
 end
 
 local function get_ngram_prec(cand, ref, n)
-   -- n = number of ngrams to consider
    local results = {}
    for i = 1, n do
-      results[i] = {0, 0} -- total, correct
+      results[i] = {0, 0}
    end
    local cand_ngrams = get_ngrams(cand, n, 1)
    local ref_ngrams = get_ngrams(ref, n, 1)
-   for ngram, d in pairs(cand_ngrams) do
-      local count = d[1]
-      local l = d[2]
-      results[l][1] = results[l][1] + count
+   for ngram, dist in pairs(cand_ngrams) do
+      local freq = dist[1]
+      local length = dist[2]
+      results[length][1] = results[length][1] + freq
       local actual
       if ref_ngrams[ngram] == nil then
-    actual = 0
+         actual = 0
       else
-    actual = ref_ngrams[ngram][1]
+         actual = ref_ngrams[ngram][1]
       end
-      results[l][2] = results[l][2] + math.min(actual, count)
+      results[length][2] = results[length][2] + math.min(actual, freq)
    end
    return results
 end
@@ -96,25 +95,23 @@ function get_bleu(cand, ref, n)
    if type(ref) ~= 'table' then
       ref = ref:totable()
    end
-   local r = get_ngram_prec(cand, ref, n)
---   print(r)
-   local bp = math.exp(1-math.max(1, #ref/#cand))
+   local res = get_ngram_prec(cand, ref, n)
+   local brevPen = math.exp(1-math.max(1, #ref/#cand))
    local correct = 0
    local total = 0
    local bleu = 1
    for i = 1, n do
-      if r[i][1] > 0 then
-	 if r[i][2] == 0 then
-	    m = m*0.5
-	    r[i][2] = m
-	 end
-	 local prec = r[i][2]/r[i][1]
-	 bleu = bleu * prec
-      end      	 --      correct = correct + r[i][2]
---      total = total + r[i][1]
+      if res[i][1] > 0 then
+         if res[i][2] == 0 then
+            m = m*0.5
+            res[i][2] = m
+         end
+         local prec = res[i][2]/res[i][1]
+         bleu = bleu * prec
+      end
    end
    bleu = bleu^(1/n)
-   return bleu*bp
+   return bleu*brevPen
 end
 
 if opt.dumpcsv then
