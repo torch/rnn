@@ -21,7 +21,7 @@ The constructor takes a single argument :
 rnn = nn.AbstractRecurrent(stepmodule)
 ```
 
-The `stepmodule` argument is an `nn.Module` instance that [cloned with shared parameters](criterion.md#nn.Module.sharedClone) at each time-step.
+The `stepmodule` argument is an `nn.Module` instance that [cloned with shared parameters](miscellaneous.md#nn.Module.sharedClone) at each time-step.
 Sub-classes can call the [getStepModule(step)](#rnn.AbstractRecurrent.getStepModule) to automatically clone the `stepmodule`
 and share it's parameters for each time-`step`.
 Each call to `forward/updateOutput` calls `self:getStepModule(self.step)` and increments the `self.step` attribute.
@@ -60,7 +60,7 @@ This method was introduced to solve a very annoying bug.
 ### [self] maskZero(v1) ###
 
 Decorates the internal `stepmodule` with [MaskZero](#rnn.MaskZero).
-The `stepmodule` is the module that is [cloned with shared parameters](criterion.md#nn.Module.sharedClone) at each time-step.
+The `stepmodule` is the module that is [cloned with shared parameters](miscellaneous.md#nn.Module.sharedClone) at each time-step.
 The `output` and `gradOutput` Tensor (or table thereof) of the `stepmodule`
 will have each row (that is, samples) zeroed where
  * the commensurate row of the `input` is a tensor of zeros (version 1 with `v1=true`); or
@@ -91,8 +91,8 @@ The `maskZero()` method returns `self`.
 The `maskZero()` method can me called on any `nn.Module`.
 Zero-masking only supports batch mode.
 
-See the [noise-contrastive-estimate.lua](examples/noise-contrastive-estimate.lua) script for an example implementation of version 2 zero-masking.
-See the [simple-bisequencer-network-variable.lua](examples/simple-bisequencer-network-variable.lua) script for an example implementation of version 1 zero-masking.
+See the [noise-contrastive-estimate.lua](../examples/noise-contrastive-estimate.lua) script for an example implementation of version 2 zero-masking.
+See the [simple-bisequencer-network-variable.lua](../examples/simple-bisequencer-network-variable.lua) script for an example implementation of version 1 zero-masking.
 
 <a name='rnn.AbstractRecurrent.setZeroMask'></a>
 ### setZeroMask(zeroMask) ##
@@ -208,25 +208,25 @@ sequence.
 Returns the stored hidden state.
 For example, the hidden state `h[step]` would be returned where `h[step] = f(x[step], h[step-1])`.
 The `input` is only required for `step=0` as it is used to initialize `h[0] = 0`.
-See [encoder-decoder-coupling.lua](examples/encoder-decoder-coupling.lua) for an example.
+See [encoder-decoder-coupling.lua](../examples/encoder-decoder-coupling.lua) for an example.
 
 <a name='rnn.AbstractRecurrent.setHiddenState'></a>
 ### setHiddenState(step, hiddenState)
 Set the hidden state of the RNN.
 This is useful to implement encoder-decoder coupling to form sequence to sequence networks.
-See [encoder-decoder-coupling.lua](examples/encoder-decoder-coupling.lua) for an example.
+See [encoder-decoder-coupling.lua](../examples/encoder-decoder-coupling.lua) for an example.
 
 <a name='rnn.AbstractRecurrent.getGradHiddenState'></a>
 ### getGradHiddenState(step, [input])
 Return stored gradient of the hidden state: `grad(h[t])`
 The `input` is used to initialize the last step of the RNN with zeros.
-See [encoder-decoder-coupling.lua](examples/encoder-decoder-coupling.lua) for an example.
+See [encoder-decoder-coupling.lua](../examples/encoder-decoder-coupling.lua) for an example.
 
 <a name='rnn.AbstractRecurrent.setGradHiddenState'></a>
 ### setGradHiddenState(step, gradHiddenState)
 Set the stored grad hidden state for a specific time-`step`.
 This is useful to implement encoder-decoder coupling to form sequence to sequence networks.
-See [encoder-decoder-coupling.lua](examples/encoder-decoder-coupling.lua) for an example.
+See [encoder-decoder-coupling.lua](../examples/encoder-decoder-coupling.lua) for an example.
 
 <a name='rnn.Recurrent.Sequencer'></a>
 <a name='rnn.AbstractRecurrent.Sequencer'></a>
@@ -243,8 +243,8 @@ Zmodel is an entire sequence of size `seqlen x batchsize [x inputsize]`.
 seq = nn.Sequencer(module)
 ```
 
-The [simple-sequencer-network.lua](examples/simple-sequencer-network.lua) training script
-is equivalent to the [simple-recurrent-network.lua](examples/simple-recurrent-network.lua)
+The [simple-sequencer-network.lua](../examples/simple-sequencer-network.lua) training script
+is equivalent to the [simple-recurrent-network.lua](../examples/simple-recurrent-network.lua)
 script.
 The difference is that the former decorates the RNN with a `Sequencer` which takes
 a table of `inputs` and `gradOutputs` (the sequence for that batch).
@@ -309,7 +309,7 @@ the RNN will only remember the previous output. This allows the RNN
 to handle long sequences without allocating any additional memory.
 
 For a simple concise example of how to make use of this module, please consult the
-[simple-recurrent-network.lua](examples/simple-recurrent-network.lua)
+[simple-recurrent-network.lua](../examples/simple-recurrent-network.lua)
 training script.
 
 <a name='rnn.LinearRNN'></a>
@@ -605,7 +605,7 @@ Anyway, in most cases, you will not have to deal with the `Recursor` object dire
 `AbstractSequencer` instances automatically decorate non-`AbstractRecurrent` instances
 with a `Recursor` in their constructors.
 
-For a concrete example of its use, please consult the [simple-recurrent-network.lua](examples/simple-recurrent-network.lua)
+For a concrete example of its use, please consult the [simple-recurrent-network.lua](../examples/simple-recurrent-network.lua)
 training script for an example of its use.
 
 <a name='rnn.Recurrence'></a>

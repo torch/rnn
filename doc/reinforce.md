@@ -25,129 +25,8 @@ within `model` by calling `model:reinforce(reward)`.
 Note that the `reward` should be a 1D tensor of size `batchSize`,
 i.e. each example in a batch has its own scalar reward.
 
-Refer to [this example](https://github.com/Element-Research/rnn/blob/master/examples/recurrent-visual-attention.lua)
+Refer to [this example](../examples/recurrent-visual-attention.lua)
 for a complete training script making use of the REINFORCE interface.
-
-<a name='nn.ReverseSequence'></a>
-## ReverseSequence ##
-
-```lua
-module = nn.ReverseSequence()
-```
-
-Reverses the order of elements in a sequence table or a tensor.
-
-Example using table:
-
-```lua
-print(module:forward{1,2,3,4})
-{4,3,2,1}
-```
-
-Example using tensor:
-
-```lua
-print(module:forward(torch.Tensor({1,2,3,4})))
- 4
- 3
- 2
- 1
-[torch.DoubleTensor of size 4]
-
-```
-
-<a name='nn.ReverseUnreverse'></a>
-## ReverseUnreverse ##
-
-```lua
-ru = nn.ReverseUnreverse(sequencer)
-```
-
-This module is used internally by the [BiSequencer](sequencer.md#rnn.BiSequencer) module.
-The `ReverseUnreverse` decorates a `sequencer` module like [SeqLSTM](sequencer.md#rnn.SeqLSTM) and [Sequencer](sequencer.md#rnn.Sequencer)
-The `sequencer` module is expected to implement the [AbstractSequencer](sequencer.md#rnn.AbstractSequencer) interface.
-When calling `forward`, the `seqlen x batchsize [x ...]` `input` tensor is reversed using [ReverseSequence](sequencer.md#rnn.ReverseSequence).
-Then the `input` sequences are forwarded (in reverse order) through the `sequencer`.
-The resulting `sequencer.output` sequences are reversed with respect to the `input`.
-Before being returned to the caller, these are unreversed using another `ReverseSequence`.
-
-<a name='nn.SpatialGlimpse'></a>
-## SpatialGlimpse ##
-Ref. A. [Recurrent Model for Visual Attention](http://papers.nips.cc/paper/5542-recurrent-models-of-visual-attention.pdf)
-
-```lua
-module = nn.SpatialGlimpse(size, depth, scale)
-```
-
-A glimpse is the concatenation of down-scaled cropped images of
-increasing scale around a given location in a given image.
-The input is a pair of Tensors: `{image, location}`
-`location` are `(y,x)` coordinates of the center of the different scales
-of patches to be cropped from image `image`.
-Coordinates are between `(-1,-1)` (top-left) and `(1,1)` (bottom-right).
-The `output` is a batch of glimpses taken in image at location `(y,x)`.
-
-`size` can be either a scalar which specifies the `width = height` of glimpses,
-or a table of `{height, width}` to support a rectangular shape of glimpses.
-`depth` is number of patches to crop per glimpse (one patch per depth).
-`scale` determines the `size(t) = scale * size(t-1)` of successive cropped patches.
-
-So basically, this module can be used to focus the attention of the model
-on a region of the input `image`.
-It is commonly used with the [RecurrentAttention](https://github.com/Element-Research/rnn#rnn.RecurrentAttention)
-module (see [this example](https://github.com/Element-Research/rnn/blob/master/examples/recurrent-visual-attention.lua)).
-
-<a name='nn.NCEModule'></a>
-## NCEModule
-Ref. A [RNNLM training with NCE for Speech Recognition](https://www.cs.toronto.edu/~amnih/papers/ncelm.pdf)
-
-```lua
-ncem = nn.NCEModule(inputSize, outputSize, k, unigrams, [Z])
-```
-
-When used in conjunction with [NCECriterion](#nn.NCECriterion),
-the `NCEModule` implements [noise-contrastive estimation](https://www.cs.toronto.edu/~amnih/papers/ncelm.pdf).
-
-The point of the NCE is to speedup computation for large `Linear` + `SoftMax` layers.
-Computing a forward/backward for `Linear(inputSize, outputSize)` for a large `outputSize` can be very expensive.
-This is common when implementing language models having with large vocabularies of a million words.
-In such cases, NCE can be an efficient alternative to computing the full `Linear` + `SoftMax` during training and
-cross-validation.
-
-The `inputSize` and `outputSize` are the same as for the `Linear` module.
-The number of noise samples to be drawn per example is `k`. A value of 25 should work well.
-Increasing it will yield better results, while a smaller value will be more efficient to process.
-The `unigrams` is a tensor of size `outputSize` that contains the frequencies or probability distribution over classes.
-It is used to sample noise samples via a fast implementation of `torch.multinomial`.
-The `Z` is the normalization constant of the approximated SoftMax.
-The default is `math.exp(9)` as specified in Ref. A.
-
-For inference, or measuring perplexity, the full `Linear` + `SoftMax` will need to
-be computed. The `NCEModule` can do this by switching on the following :
-
-```lua
-ncem:evaluate()
-ncem.normalized = true
-```
-
-Furthermore, to simulate `Linear` + `LogSoftMax` instead, one need only add the following to the above:
-
-```lua
-ncem.logsoftmax = true
-```
-
-An example is provided via the rnn package.
-
-<a name='nn.NCECriterion'></a>
-## NCECriterion
-
-```lua
-ncec = nn.NCECriterion()
-```
-
-This criterion only works with an [NCEModule](#nn.NCEModule) on the output layer.
-Together, they implement [noise-contrastive estimation](https://www.cs.toronto.edu/~amnih/papers/ncelm.pdf).
-
 
 <a name='nn.Reinforce'></a>
 ## Reinforce ##
@@ -250,8 +129,7 @@ d ln(f(x,u,s))   (x - u)
      d u           s^2
 ```
 
-As an example, it is used to sample locations for the [RecurrentAttention](https://github.com/Element-Research/rnn#rnn.RecurrentAttention)
-module (see [this example](https://github.com/Element-Research/rnn/blob/master/examples/recurrent-visual-attention.lua)).
+As an example, it is used to sample locations for the [RecurrentAttention](sequencer.md#rnn.RecurrentAttention) module (see [this example](../examples/recurrent-visual-attention.lua)).
 
 <a name='nn.ReinforceGamma'></a>
 ## ReinforceGamma ##
@@ -359,8 +237,7 @@ The predicted `b` can be nothing more than the expectation `E(R)`.
 Note : for RNNs with R = 1 for last step in sequence, encapsulate it
 in `nn.ModuleCriterion(VRClassReward, nn.SelectTable(-1))`.
 
-For an example, this criterion is used along with the [RecurrentAttention](https://github.com/Element-Research/rnn#rnn.RecurrentAttention)
-module to [train a recurrent model for visual attention](https://github.com/Element-Research/rnn/blob/master/examples/recurrent-visual-attention.lua).
+For an example, this criterion is used along with the [RecurrentAttention](sequencer.md#rnn.RecurrentAttention) module to [train a recurrent model for visual attention](../examples/recurrent-visual-attention.lua).
 
 <a name='nn.BinaryClassReward'></a>
 ## BinaryClassReward ##

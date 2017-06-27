@@ -5,17 +5,17 @@ You can use it to build RNNs, LSTMs, GRUs, BRNNs, BLSTMs, and so forth and so on
 
 This library includes documentation for the following objects :
 
-  * [Recurrent Modules](doc/recurrent.md) Modules that consider successive calls to `forward` as different time-steps in a sequence.
-  * [Sequencer Modules](doc/sequencer.md) Modules that `forward` entire sequences through a decorated `AbstractRecurrent` instance.
-  * [Criterion Modules](doc/criterion.md) Criterion used for handling sequential inputs and targets.
-  * [Miscellaneous Modules](doc/miscellaneous.md) Miscellaneous modukes and criterions
-  * [Reinforce Modules](doc/reinforce.md) The modules and criterions here can be used to implement the REINFORCE algorithm.
+  * [Recurrent modules:](doc/recurrent.md) Modules that consider successive calls to `forward` as different time-steps in a sequence.
+  * [Sequencer modules:](doc/sequencer.md) Modules that `forward` entire sequences through a decorated `AbstractRecurrent` instance.
+  * [Criterion modules:](doc/criterion.md) Criterion used for handling sequential inputs and targets.
+  * [Miscellaneous modules:](doc/miscellaneous.md) Miscellaneous modukes and criterions
+  * [Reinforce modules:](doc/reinforce.md) The modules and criterions here can be used to implement the REINFORCE algorithm.
 	
 	
 <a name='rnn.examples'></a>
 ## Examples ##
 
-A complete list of examples is available in the [examples directory](https://github.com/Element-Research/rnn/blob/master/examples/README.md)
+A complete list of examples is available in the [examples directory](examples/README.md)
 
 ## Citation ##
 

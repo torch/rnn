@@ -60,8 +60,8 @@ instances as the flow of gradients between different time-steps internally.
 Instead, call the [AbstractRecurrent.maskZero](recurrent.md#rnn.AbstractRecurrent.maskZero) method
 to encapsulate the internal `stepmodule`.
 
-See the [noise-contrastive-estimate.lua](examples/noise-contrastive-estimate.lua) script for an example implementation of version 2 zero-masking.
-See the [simple-bisequencer-network-variable.lua](examples/simple-bisequencer-network-variable.lua) script for an example implementation of version 1 zero-masking.
+See the [noise-contrastive-estimate.lua](../examples/noise-contrastive-estimate.lua) script for an example implementation of version 2 zero-masking.
+See the [simple-bisequencer-network-variable.lua](../examples/simple-bisequencer-network-variable.lua) script for an example implementation of version 1 zero-masking.
 
 <a name='rnn.MaskZero.setZeroMask'></a>
 ### setZeroMask(zeroMask) ##
@@ -139,6 +139,128 @@ This is because the commensurate row in the `zeroMask` is a one.
 The call to `forward` also disregards the second sample in measuring the `loss`.
 
 This decorator makes it possible to pad sequences with different lengths in the same batch with zero vectors.
+
+
+<a name='nn.ReverseSequence'></a>
+## ReverseSequence ##
+
+```lua
+module = nn.ReverseSequence()
+```
+
+Reverses the order of elements in a sequence table or a tensor.
+
+Example using table:
+
+```lua
+print(module:forward{1,2,3,4})
+{4,3,2,1}
+```
+
+Example using tensor:
+
+```lua
+print(module:forward(torch.Tensor({1,2,3,4})))
+ 4
+ 3
+ 2
+ 1
+[torch.DoubleTensor of size 4]
+
+```
+
+<a name='nn.ReverseUnreverse'></a>
+## ReverseUnreverse ##
+
+```lua
+ru = nn.ReverseUnreverse(sequencer)
+g```
+
+This module is used internally by the [BiSequencer](sequencer.md#rnn.BiSequencer) module.
+The `ReverseUnreverse` decorates a `sequencer` module like [SeqLSTM](sequencer.md#rnn.SeqLSTM) and [Sequencer](sequencer.md#rnn.Sequencer)
+The `sequencer` module is expected to implement the [AbstractSequencer](sequencer.md#rnn.AbstractSequencer) interface.
+When calling `forward`, the `seqlen x batchsize [x ...]` `input` tensor is reversed using [ReverseSequence](sequencer.md#rnn.ReverseSequence).
+Then the `input` sequences are forwarded (in reverse order) through the `sequencer`.
+The resulting `sequencer.output` sequences are reversed with respect to the `input`.
+Before being returned to the caller, these are unreversed using another `ReverseSequence`.
+
+<a name='nn.SpatialGlimpse'></a>
+## SpatialGlimpse ##
+Ref. A. [Recurrent Model for Visual Attention](http://papers.nips.cc/paper/5542-recurrent-models-of-visual-attention.pdf)
+
+```lua
+module = nn.SpatialGlimpse(size, depth, scale)
+```
+
+A glimpse is the concatenation of down-scaled cropped images of
+increasing scale around a given location in a given image.
+The input is a pair of Tensors: `{image, location}`
+`location` are `(y,x)` coordinates of the center of the different scales
+of patches to be cropped from image `image`.
+Coordinates are between `(-1,-1)` (top-left) and `(1,1)` (bottom-right).
+The `output` is a batch of glimpses taken in image at location `(y,x)`.
+
+`size` can be either a scalar which specifies the `width = height` of glimpses,
+or a table of `{height, width}` to support a rectangular shape of glimpses.
+`depth` is number of patches to crop per glimpse (one patch per depth).
+`scale` determines the `size(t) = scale * size(t-1)` of successive cropped patches.
+
+So basically, this module can be used to focus the attention of the model
+on a region of the input `image`.
+It is commonly used with the [RecurrentAttention](sequencer.md#rnn.RecurrentAttention)
+module (see [this example](../examples/recurrent-visual-attention.lua)).
+
+<a name='nn.NCEModule'></a>
+## NCEModule
+Ref. A [RNNLM training with NCE for Speech Recognition](https://www.cs.toronto.edu/~amnih/papers/ncelm.pdf)
+
+```lua
+ncem = nn.NCEModule(inputSize, outputSize, k, unigrams, [Z])
+```
+
+When used in conjunction with [NCECriterion](#nn.NCECriterion),
+the `NCEModule` implements [noise-contrastive estimation](https://www.cs.toronto.edu/~amnih/papers/ncelm.pdf).
+
+The point of the NCE is to speedup computation for large `Linear` + `SoftMax` layers.
+Computing a forward/backward for `Linear(inputSize, outputSize)` for a large `outputSize` can be very expensive.
+This is common when implementing language models having with large vocabularies of a million words.
+In such cases, NCE can be an efficient alternative to computing the full `Linear` + `SoftMax` during training and
+cross-validation.
+
+The `inputSize` and `outputSize` are the same as for the `Linear` module.
+The number of noise samples to be drawn per example is `k`. A value of 25 should work well.
+Increasing it will yield better results, while a smaller value will be more efficient to process.
+The `unigrams` is a tensor of size `outputSize` that contains the frequencies or probability distribution over classes.
+It is used to sample noise samples via a fast implementation of `torch.multinomial`.
+The `Z` is the normalization constant of the approximated SoftMax.
+The default is `math.exp(9)` as specified in Ref. A.
+
+For inference, or measuring perplexity, the full `Linear` + `SoftMax` will need to
+be computed. The `NCEModule` can do this by switching on the following :
+
+```lua
+ncem:evaluate()
+ncem.normalized = true
+```
+
+Furthermore, to simulate `Linear` + `LogSoftMax` instead, one need only add the following to the above:
+
+```lua
+ncem.logsoftmax = true
+```
+
+An example is provided via the rnn package.
+
+<a name='nn.NCECriterion'></a>
+## NCECriterion
+
+```lua
+ncec = nn.NCECriterion()
+```
+
+This criterion only works with an [NCEModule](#nn.NCEModule) on the output layer.
+Together, they implement [noise-contrastive estimation](https://www.cs.toronto.edu/~amnih/papers/ncelm.pdf).
+
 
 <a name='rnn.VariableLength'></a>
 ## VariableLength ##
@@ -242,8 +364,7 @@ clone:share(mlp, 'weight', 'bias', 'gradWeight', 'gradBias')
 ```
 yet it is much more efficient, especially for modules with lots of parameters, as these
 Tensors aren't needlessly copied during the `clone`.
-This is particularly useful for [Recurrent neural networks](https://github.com/torch/rnn/blob/master/doc/README.md)
-which require efficient copies with shared parameters and gradient w.r.t. parameters for each time-step.
+This is particularly useful for RNNs which require efficient copies with shared parameters and gradient w.r.t. parameters for each time-step.
 
 <a name='nn.Module.maxParamNorm'></a>
 ### Module:maxParamNorm([maxOutNorm, maxInNorm]) ###

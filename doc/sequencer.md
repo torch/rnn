@@ -1,7 +1,7 @@
 <a name='rnn.sequencer'></a>
 # Sequencer Modules #
 
-Modules that `forward` entire sequences through a decorated `AbstractRecurrent` instance :
+Modules that `forward` entire sequences through an RNN :
  * [AbstractSequencer](sequencer.md#rnn.AbstractSequencer) : an abstract class inherited by Sequencer, Repeater, RecurrentAttention, etc.;
  * [Sequencer](sequencer.md#rnn.Sequencer) : applies an encapsulated module to all elements in an input sequence  (Tensor or Table);
  * [SeqLSTM](sequencer.md#rnn.SeqLSTM) : a faster version of `nn.Sequencer(nn.RecLSTM)` where the `input` and `output` are tensors;
@@ -10,7 +10,7 @@ Modules that `forward` entire sequences through a decorated `AbstractRecurrent` 
    * [SeqBLSTM](sequencer.md#rnn.SeqBLSTM) : bidirectional LSTM that uses two `SeqLSTMs` internally;
    * [SeqBGRU](sequencer.md#rnn.SeqBGRU) : bidirectional GRU that uses two `SeqGRUs` internally;
  * [Repeater](sequencer.md#rnn.Repeater) : repeatedly applies the same input to an `AbstractRecurrent` instance;
- * [RecurrentAttention](sequencer.md#rnn.RecurrentAttention) : a generalized attention model for [REINFORCE modules](https://github.com/nicholas-leonard/dpnn#nn.Reinforce);
+ * [RecurrentAttention](sequencer.md#rnn.RecurrentAttention) : a generalized attention model for [REINFORCE modules](reinforce.md#nn.Reinforce);
 
 <a name='rnn.AbstractSequencer'></a>
 ## AbstractSequencer ##
@@ -134,7 +134,7 @@ be decorated by their own `Sequencer`. The recent update, which introduced the
 `AbstractRecurrent`, non-`AbstractRecurrent` or a composite structure of both types.
 Nevertheless, existing code shouldn't be affected by the change.
 
-For a concise example of its use, please consult the [simple-sequencer-network.lua](examples/simple-sequencer-network.lua)
+For a concise example of its use, please consult the [simple-sequencer-network.lua](../examples/simple-sequencer-network.lua)
 training script.
 
 <a name='rnn.Sequencer.remember'></a>
@@ -288,7 +288,7 @@ But the sequence length of each batch can vary.
 Note that when calling `BiSequencer:remember()`, only the `fwd` module can [remember()](#rnn.AbstractSequencer.remember).
 The `bwd` module never remembers because it views the `input` in reverse order.
 
-Also note that [`BiSequencer:setZeroMask(zeroMask)`](#rnn.MaskZero.setZeroMask)
+Also note that [`BiSequencer:setZeroMask(zeroMask)`](miscellaneous.md#rnn.MaskZero.setZeroMask)
 corrently reverses the order of the `zeroMask` for the `bwd` RNN.
 
 
@@ -354,15 +354,15 @@ action sampled from the `action` module.
 The output size of the `rnn` must be equal to `hiddenSize`.
 
 `action` is a [Module](https://github.com/torch/nn/blob/master/doc/module.md#nn.Module)
-that uses a [REINFORCE module](https://github.com/nicholas-leonard/dpnn#nn.Reinforce) (ref. B) like
-[ReinforceNormal](https://github.com/nicholas-leonard/dpnn#nn.ReinforceNormal),
-[ReinforceCategorical](https://github.com/nicholas-leonard/dpnn#nn.ReinforceCategorical), or
-[ReinforceBernoulli](https://github.com/nicholas-leonard/dpnn#nn.ReinforceBernoulli)
+that uses a [REINFORCE module](reinforce.md#nn.Reinforce) (ref. B) like
+[ReinforceNormal](reinforce.md#nn.ReinforceNormal),
+[ReinforceCategorical](reinforce.md#nn.ReinforceCategorical), or
+[ReinforceBernoulli](reinforce.md#nn.ReinforceBernoulli)
 to sample actions given the previous time-step's output of the `rnn`.
 During the first time-step, the `action` module is fed with a Tensor of zeros of size `input:size(1) x hiddenSize`.
 It is important to understand that the sampled actions do not receive gradients
 backpropagated from the training criterion.
-Instead, a reward is broadcast from a Reward Criterion like [VRClassReward](https://github.com/nicholas-leonard/dpnn#nn.VRClassReward) Criterion to
+Instead, a reward is broadcast from a Reward Criterion like [VRClassReward](reinforce.md#nn.VRClassReward) Criterion to
 the `action`'s REINFORCE module, which will backprogate graidents computed from the `output` samples
 and the `reward`.
 Therefore, the `action` module's outputs are only used internally, within the RecurrentAttention module.
@@ -372,4 +372,4 @@ Therefore, the `action` module's outputs are only used internally, within the Re
 `hiddenSize` is the output size of the `rnn`. This variable is necessary
 to generate the zero Tensor to sample an action for the first step (see above).
 
-A complete implementation of Ref. A is available [here](examples/recurrent-visual-attention.lua).
+A complete implementation of Ref. A is available [here](../examples/recurrent-visual-attention.lua).
