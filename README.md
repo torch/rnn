@@ -5,11 +5,11 @@ You can use it to build RNNs, LSTMs, GRUs, BRNNs, BLSTMs, and so forth and so on
 
 This library includes documentation for the following objects :
 
-  * [Recurrent modules:](doc/recurrent.md) Modules that consider successive calls to `forward` as different time-steps in a sequence.
-  * [Sequencer modules:](doc/sequencer.md) Modules that `forward` entire sequences through a decorated `AbstractRecurrent` instance.
-  * [Criterion modules:](doc/criterion.md) Criterion used for handling sequential inputs and targets.
-  * [Miscellaneous modules:](doc/miscellaneous.md) Miscellaneous modukes and criterions
-  * [Reinforce modules:](doc/reinforce.md) The modules and criterions here can be used to implement the REINFORCE algorithm.
+  * [Recurrent modules](doc/recurrent.md) consider successive calls to `forward` as different time-steps in a sequence.
+  * [Sequencer modules](doc/sequencer.md) `forward` entire sequences through a decorated `AbstractRecurrent` instance.
+  * [Sequencer criterion](doc/criterion.md) handle `input` and `target` sequences.
+  * [Miscellaneous modules and criterions](doc/miscellaneous.md) for things like noise contrastive estimation (NCE) and zero-masking.
+  * [Reinforce modules and criterions](doc/reinforce.md) implement the REINFORCE learning rule.
 	
 	
 <a name='rnn.examples'></a>
