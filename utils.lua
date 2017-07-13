@@ -332,3 +332,25 @@ function nn.utils.get_ngram_prec(cand, ref, n)
    end
    return results
 end
+
+function nn.utils.get_ngram_recall(cand, ref, n)
+   local results = {}
+   for i = 1, n do
+      results[i] = {0, 0}
+   end
+   local cand_ngrams = nn.utils.get_ngrams(cand, n, 1)
+   local ref_ngrams = nn.utils.get_ngrams(ref, n, 1)
+   for ngram, dist in pairs(ref_ngrams) do
+      local freq = dist[1]
+      local length = dist[2]
+      results[length][1] = results[length][1] + freq
+      local actual
+      if cand_ngrams[ngram] == nil then
+         actual = 0
+      else
+         actual = cand_ngrams[ngram][1]
+      end
+      results[length][2] = results[length][2] + math.min(actual, freq)
+   end
+   return results
+end

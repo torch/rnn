@@ -6464,6 +6464,22 @@ function rnntest.NCE_multicuda()
    mytester:assertTensorEq(nce2.gradWeight[{{},{1+(hiddensize/2), hiddensize}}]:float(), nce.gradWeight.tensors[2]:float(), 0.000001)
 end
 
+function rnntest.bleu()
+   local cand = {1, 2, 3, 2, 3, 2, 3, 4, 5, 2, 1, 3 ,2 ,3}
+   local ref = {3, 2, 3, 2, 1, 3, 2, 3 ,2 , 3, 4, 5, 2, 1, 3}
+   local bleu = nn.get_bleu(cand, ref, 4)
+   mytester:assertTensorEq(torch.Tensor(bleu), torch.Tensor(0.83101069788036), 0.001)
+   
+end
+
+function rnntest.get_rougeN()
+   
+   local cand = {1, 2, 3, 2, 3, 2, 3, 4, 5, 2, 1, 3 ,2 ,3}
+   local ref = {3, 2, 3, 2, 1, 3, 2, 3 ,2 , 3, 4, 5, 2, 1, 3}
+   local rouge = nn.get_rougeN(cand, ref, 4)
+   mytester:assertTensorEq(torch.Tensor(rouge), torch.Tensor(0.75), 0.00)
+end
+
 function rnn.test(tests, exclude, benchmark_)
    benchmark = benchmark_
    mytester = torch.Tester()
