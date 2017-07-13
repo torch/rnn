@@ -84,6 +84,7 @@ SET(luasrc
   TotalDropout.lua
   VRClassReward.lua
   ReverseUnreverse.lua
+  measure.lua
   deprecated/SeqLSTMP.lua
   deprecated/SeqReverseSequence.lua
   deprecated/BiSequencerLM.lua
