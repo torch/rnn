@@ -27,7 +27,6 @@ paths.require 'librnn'
 unpack = unpack or table.unpack
 
 require('rnn.utils')
-
 -- extensions to existing nn.Module
 require('rnn.Module')
 require('rnn.Container')
@@ -111,6 +110,9 @@ require('rnn.FastLSTM')
 require('rnn.SeqLSTMP')
 require('rnn.SeqReverseSequence')
 require('rnn.BiSequencerLM')
+
+
+require('rnn.measure')
 
 -- prevent likely name conflicts
 nn.rnn = rnn
