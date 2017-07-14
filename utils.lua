@@ -311,6 +311,32 @@ function nn.utils.get_ngrams(sent, n, count)
    return ngrams
 end
 
+function nn.utils.get_skip_bigrams(sent, ref, count, dskip)
+   local skip_bigrams = {}
+   ref = ref or sent
+   for beg = 1, #sent do
+      if ref[sent[beg]] then
+	 local temp_token = sent[beg]
+	 for  last= beg+1, math.min(beg + dskip, #sent) do
+	    if ref[sent[last]] then
+	       skip_bigram = temp_token..sent[last]
+	       if not count then
+		  table.insert(skip_bigrams, skip_bigram)
+	       else
+		  if skip_bigrams[skip_bigram] == nil then
+		     skip_bigrams[skip_bigram] = {1, len}
+		  else
+		     skip_bigrams[skip_bigram][1] = skip_bigrams[skip_bigram][1] + 1
+		  end
+	       end
+	    end
+	 end
+      end
+   end
+   return skip_bigrams
+end
+
+
 function nn.utils.get_ngram_prec(cand, ref, n)
    local results = {}
    for i = 1, n do

@@ -6468,7 +6468,7 @@ function rnntest.bleu()
    local cand = {1, 2, 3, 2, 3, 2, 3, 4, 5, 2, 1, 3 ,2 ,3}
    local ref = {3, 2, 3, 2, 1, 3, 2, 3 ,2 , 3, 4, 5, 2, 1, 3}
    local bleu = nn.get_bleu(cand, ref, 4)
-   mytester:assertTensorEq(torch.Tensor(bleu), torch.Tensor(0.83101069788036), 0.001)
+   mytester:assert(math.abs(bleu - 0.83101069788036) < 0.000001)
    
 end
 
@@ -6477,7 +6477,16 @@ function rnntest.get_rougeN()
    local cand = {1, 2, 3, 2, 3, 2, 3, 4, 5, 2, 1, 3 ,2 ,3}
    local ref = {3, 2, 3, 2, 1, 3, 2, 3 ,2 , 3, 4, 5, 2, 1, 3}
    local rouge = nn.get_rougeN(cand, ref, 4)
-   mytester:assertTensorEq(torch.Tensor(rouge), torch.Tensor(0.75), 0.00)
+   mytester:assert(math.abs(rouge - 0.75)< 0.000000000001)
+end
+
+
+function rnntest.get_rougeS()
+   
+   local cand = {1, 2, 3, 4}
+   local ref = {1, 5, 3, 4}
+   local rouge = nn.get_rougeS(cand, ref)
+   mytester:assert(math.abs(rouge - 0.5)< 0.000000000001)
 end
 
 function rnn.test(tests, exclude, benchmark_)
