@@ -296,9 +296,9 @@ function nn.utils.get_ngrams(sent, n, count)
    for beg = 1, #sent do
       for  last= beg, math.min(beg+n-1, #sent) do
          local ngram = table.concat(sent, ' ', beg, last)
-         local len = last-beg+1 -- keep track of ngram length
+	 local len = last-beg+1 -- keep track of ngram length
          if not count then
-            table.insert(ngrams, ngram)
+            ngrams[ngram] = 1
          else
             if ngrams[ngram] == nil then
                ngrams[ngram] = {1, len}
@@ -317,17 +317,13 @@ function nn.utils.get_skip_bigrams(sent, ref, count, dskip)
    for beg = 1, #sent do
       if ref[sent[beg]] then
 	 local temp_token = sent[beg]
-	 for  last= beg+1, math.min(beg + dskip, #sent) do
+	 for  last= beg+1, math.min(beg + dskip-1, #sent) do
 	    if ref[sent[last]] then
 	       skip_bigram = temp_token..sent[last]
 	       if not count then
-		  table.insert(skip_bigrams, skip_bigram)
+		  skip_bigrams[skip_bigram] = 1
 	       else
-		  if skip_bigrams[skip_bigram] == nil then
-		     skip_bigrams[skip_bigram] = {1, len}
-		  else
-		     skip_bigrams[skip_bigram][1] = skip_bigrams[skip_bigram][1] + 1
-		  end
+		  skip_bigrams[skip_bigram] = (skip_bigram[bigram] or 0) + 1
 	       end
 	    end
 	 end

@@ -6482,11 +6482,19 @@ end
 
 
 function rnntest.get_rougeS()
-   
-   local cand = {1, 2, 3, 4}
-   local ref = {1, 5, 3, 4}
-   local rouge = nn.get_rougeS(cand, ref)
-   mytester:assert(math.abs(rouge - 0.5)< 0.000000000001)
+   local cand_tbl = {
+   'police kill the gunman',
+   'the gunman kill police',
+   'the gunman police killed'
+}
+local ref_str = "police killed the gunman"
+local ref = ref_str:split(" ")
+local rouge = nn.get_rougeS(cand_tbl[1]:split(" "), ref, 1, 4)
+   mytester:assert(math.abs(rouge - 1/2)< 0.000000000001)
+local rouge = nn.get_rougeS(cand_tbl[2]:split(" "), ref, 1, 4)
+   mytester:assert(math.abs(rouge - 1/6)< 0.000000000001)
+local rouge = nn.get_rougeS(cand_tbl[3]:split(" "), ref, 1, 4)
+   mytester:assert(math.abs(rouge - 1/3)< 0.000000000001)
 end
 
 function rnn.test(tests, exclude, benchmark_)
