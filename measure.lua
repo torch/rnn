@@ -57,6 +57,7 @@ function nn.get_rougeN(cand, ref, n, weight)
 end
 
 function nn.get_rougeS(cand, ref, beta, dskip)
+   local eps = 0.00000001
    local beta = beta or 1
    beta = beta * beta
 
@@ -77,10 +78,10 @@ function nn.get_rougeS(cand, ref, beta, dskip)
    
    for bigram, freq in pairs(ref_skip_bigrams) do
       local actual
-      if cand_skip_bigrams[bigram] == nil then
+      if cand_skip_bigrams[tostring(bigram)] == nil then
          actual = 0
       else
-         actual = cand_skip_bigrams[bigram]
+         actual = cand_skip_bigrams[tostring(bigram)]
       end
      correct = correct + math.min(actual, freq)
    end
@@ -88,7 +89,7 @@ function nn.get_rougeS(cand, ref, beta, dskip)
    local total_skip_bigrams_cand = (dskip - 1)*(2 * #cand - dskip)/2
    local rskip2 = correct/total_skip_bigrams_cand
    local pskip2 = correct/total_skip_bigrams_ref
-   local rouge = (1 + beta)*rskip2*pskip2/(rskip2 + beta*pskip2)
+   local rouge = (1 + beta)*rskip2*pskip2/(rskip2 + beta*pskip2 + eps)
    return rouge
 end
 
