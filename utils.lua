@@ -313,12 +313,11 @@ end
 
 function nn.utils.get_skip_bigrams(sent, ref, count, dskip)
    local skip_bigrams = {}
-   ref = ref or sent
    for beg = 1, #sent do
-      if ref[sent[beg]] then
+      if ref[tostring(sent[beg])] then
 	 local temp_token = sent[beg]
 	 for  last= beg+1, math.min(beg + dskip-1, #sent) do
-	    if ref[sent[last]] then
+	    if ref[tostring(sent[last])] then
 	       skip_bigram = temp_token..sent[last]
 	       if not count then
 		  skip_bigrams[skip_bigram] = 1
