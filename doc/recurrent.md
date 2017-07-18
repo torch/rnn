@@ -346,7 +346,7 @@ References :
  * C. [LSTM: A Search Space Odyssey](http://arxiv.org/pdf/1503.04069v1.pdf)
  * D. [nngraph LSTM implementation on github](https://github.com/wojzaremba/lstm)
 
- ![LSTM](doc/image/LSTM.png)
+ ![LSTM](.//image/LSTM.png)
 
 Internally, `RecLSTM` uses a single module [StepLSTM](#rnn.StepLSTM), which is cloned (with shared parameters) for each time-step.
 A 2.0x speedup is obtained by computing every time-step using a single specialized module instead of using multiple basic *nn* modules.
