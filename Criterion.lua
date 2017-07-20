@@ -16,5 +16,5 @@ function Criterion:setZeroMask(zeroMask)
 end
 
 function Criterion:clearState()
-  return nn.utils.clear(self, 'gradInput')
+   return nn.utils.clear(self, 'gradInput')
 end

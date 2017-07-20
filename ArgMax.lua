@@ -9,7 +9,7 @@ local ArgMax, parent = torch.class("nn.ArgMax", "nn.Module")
 function ArgMax:__init(dim, nInputDim, asLong)
    parent.__init(self)
    self.dim = dim or 1
-   self.nInputDim = nInputDim or 9999
+   self.nInputDim = nInputDim or 1
    self.asLong = (asLong == nil) and true or asLong
    if self.asLong then
       self.output = torch.LongTensor()
@@ -21,7 +21,7 @@ function ArgMax:updateOutput(input)
    self._indices = self._indices or
       (torch.type(input) == 'torch.CudaTensor' and (torch.CudaLongTensor and torch.CudaLongTensor() or torch.CudaTensor()) or torch.LongTensor())
    local dim = (input:dim() > self.nInputDim) and (self.dim + 1) or self.dim
-   
+
    torch.max(self._value, self._indices, input, dim)
    if input:dim() > 1 then
       local idx = self._indices:select(dim, 1)
