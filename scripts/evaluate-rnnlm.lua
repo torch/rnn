@@ -1,6 +1,5 @@
 require 'nngraph'
 require 'rnn'
-require 'optim'
 local dl = require 'dataload'
 
 
@@ -15,6 +14,8 @@ cmd:option('--device', 1, 'which GPU device to use')
 cmd:option('--nsample', -1, 'sample this many words from the language model')
 cmd:option('--temperature', 1, 'temperature of multinomial. Increase to sample wildly, reduce to be more deterministic.')
 cmd:option('--dumpcsv', false, 'dump training and validation error to CSV file')
+cmd:option('--bleu', false, 'BLEU evaluation')
+cmd:option('--blueN', 4, 'N-grams for blue evaluation')
 cmd:text()
 local opt = cmd:parse(arg or {})
 
@@ -134,7 +135,7 @@ if opt.nsample > 0 then
       print(table.concat(sampletext, ' '))
    end
 else
-   local sumErr, count = 0, 0
+   local sumErr, count, sum_bleu, num_sent = 0, 0, 0, 0
 
    for i, inputs, targets in testset:subiter(xplog.opt.seqlen or 100) do
       inputs:apply(function(x)
@@ -145,6 +146,15 @@ else
       local targets = targetmodule:forward(targets)
       local inputs = opt.nce and {inputs, targets} or inputs
       local outputs = lm:forward(inputs)
+      if opt.bleu then
+         max_ind = torch.multinomial(torch.exp(outputs:view(targets:nElement(), -1)), 1):view(targets:size(1),targets:size(2))
+            for batchIdx=1, targets:size(2) do
+               sum_bleu = sum_bleu + nn.get_bleu(max_ind:select(2, batchIdx),
+                                              targets:select(2, batchIdx),
+                                              opt.blueN)
+               num_sent = num_sent + 1
+            end
+         end
       local err = criterion:forward(outputs, targets)
       sumErr = sumErr + err
    end
@@ -156,5 +166,8 @@ else
 
    local ppl = torch.exp(sumErr/count)
    print("Test PPL : "..ppl)
+   if opt.bleu then
+      print(" BLEU score : "..sum_bleu/num_sent)
+   end
 end
 

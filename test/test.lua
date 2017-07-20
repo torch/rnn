@@ -6464,6 +6464,39 @@ function rnntest.NCE_multicuda()
    mytester:assertTensorEq(nce2.gradWeight[{{},{1+(hiddensize/2), hiddensize}}]:float(), nce.gradWeight.tensors[2]:float(), 0.000001)
 end
 
+function rnntest.bleu()
+   local cand = {1, 2, 3, 2, 3, 2, 3, 4, 5, 2, 1, 3 ,2 ,3}
+   local ref = {3, 2, 3, 2, 1, 3, 2, 3 ,2 , 3, 4, 5, 2, 1, 3}
+   local bleu = nn.get_bleu(cand, ref, 4)
+   mytester:assert(math.abs(bleu - 0.83101069788036) < 0.000001)
+   
+end
+
+function rnntest.get_rougeN()
+   
+   local cand = {1, 2, 3, 2, 3, 2, 3, 4, 5, 2, 1, 3 ,2 ,3}
+   local ref = {3, 2, 3, 2, 1, 3, 2, 3 ,2 , 3, 4, 5, 2, 1, 3}
+   local rouge = nn.get_rougeN(cand, ref, 4)
+   mytester:assert(math.abs(rouge - 0.75)< 0.000000000001)
+end
+
+
+function rnntest.get_rougeS()
+   local cand_tbl = {
+      'police kill the gunman',
+      'the gunman kill police',
+      'the gunman police killed'
+   }
+   local ref_str = "police killed the gunman"
+   local ref = ref_str:split(" ")
+   local rouge = nn.get_rougeS(cand_tbl[1]:split(" "), ref, 1, 4)
+   mytester:assert(math.abs(rouge - 1/2)< 0.000000000001)
+   local rouge = nn.get_rougeS(cand_tbl[2]:split(" "), ref, 1, 4)
+   mytester:assert(math.abs(rouge - 1/6)< 0.000000000001)
+   local rouge = nn.get_rougeS(cand_tbl[3]:split(" "), ref, 1, 4)
+   mytester:assert(math.abs(rouge - 1/3)< 0.000000000001)
+end
+
 function rnn.test(tests, exclude, benchmark_)
    benchmark = benchmark_
    mytester = torch.Tester()
