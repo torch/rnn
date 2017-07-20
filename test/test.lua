@@ -6490,11 +6490,11 @@ function rnntest.get_rougeS()
    local ref_str = "police killed the gunman"
    local ref = ref_str:split(" ")
    local rouge = nn.get_rougeS(cand_tbl[1]:split(" "), ref, 1, 4)
-   mytester:assert(math.abs(rouge - 1/2)< 0.000000000001)
+   mytester:assert(math.abs(rouge - 1/2)< 0.001)
    local rouge = nn.get_rougeS(cand_tbl[2]:split(" "), ref, 1, 4)
-   mytester:assert(math.abs(rouge - 1/6)< 0.000000000001)
+   mytester:assert(math.abs(rouge - 1/6)< 0.001)
    local rouge = nn.get_rougeS(cand_tbl[3]:split(" "), ref, 1, 4)
-   mytester:assert(math.abs(rouge - 1/3)< 0.000000000001)
+   mytester:assert(math.abs(rouge - 1/3)< 0.001)
 end
 
 function rnn.test(tests, exclude, benchmark_)
