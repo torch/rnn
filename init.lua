@@ -14,7 +14,7 @@ function nn.require(packagename)
    assert(torch.type(packagename) == 'string')
    local success, message = pcall(function() require(packagename) end)
    if not success then
-      print("missing package "..packagename..": run 'luarocks install nnx'")
+      print("missing package "..packagename..": run 'luarocks install '"..packagename.."'")
       error(message)
    end
 end
@@ -22,7 +22,8 @@ end
 
 -- c lib:
 require "paths"
-paths.require 'librnn'
+pcall(function() paths.require 'librnn' end) -- Not sure why this works...
+pcall(function() paths.require 'librnn' end)
 
 unpack = unpack or table.unpack
 

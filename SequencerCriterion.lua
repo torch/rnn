@@ -53,7 +53,7 @@ function SequencerCriterion:updateGradInput(input, target)
    end
 
    if self.sizeAverage then
-      nn.utils.recursiveDiv(tableGradInput[i], seqlen)
+      nn.utils.recursiveDiv(tableGradInput, seqlen)
    end
 
    if torch.isTensor(input) then
